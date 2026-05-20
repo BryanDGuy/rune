@@ -46,7 +46,6 @@ func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts *SetOpti
 		return err
 	}
 
-	// Send header first.
 	if err = stream.Send(&runev1.SetRequest{
 		Payload: &runev1.SetRequest_Header{
 			Header: &runev1.SetHeader{
@@ -58,7 +57,6 @@ func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts *SetOpti
 		return err
 	}
 
-	// Stream chunks.
 	buf := make([]byte, chunkSize)
 	for {
 		n, readErr := io.ReadFull(r, buf)
@@ -113,10 +111,7 @@ func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 
 // Close closes the underlying gRPC connection.
 func (c *Client) Close() error {
-	if c.conn != nil {
-		return c.conn.Close()
-	}
-	return nil
+	return c.conn.Close()
 }
 
 // streamReader implements io.ReadCloser over a server-streaming gRPC call.
