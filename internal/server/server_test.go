@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 )
@@ -53,12 +54,47 @@ func newTestClient(t *testing.T) (runev1.RuneServiceClient, func()) {
 	require.NoError(t, err)
 
 	client := runev1.NewRuneServiceClient(conn)
+	// Stop order: GracefulStop waits for in-flight RPCs, then close conn and store.
 	cleanup := func() {
-		conn.Close()
 		srv.Stop()
-		store.Close()
+		conn.Close()
+		_ = store.Close()
 	}
 	return client, cleanup
+}
+
+func newTestConn(t *testing.T) (*grpc.ClientConn, func()) {
+	t.Helper()
+	cfg := &config.Config{
+		DataDir:            t.TempDir(),
+		MaxStorageBytes:    1 << 30,
+		EvictionThreshold:  0.8,
+		EvictionSizeWeight: 1.0,
+		EvictionAgeWeight:  1.0,
+		StreamChunkSize:    1 << 20,
+		GCInterval:         time.Hour,
+		GCDiscardRatio:     0.5,
+		TTLSweepInterval:   time.Hour,
+	}
+	store, err := storage.NewBadgerStore(cfg)
+	require.NoError(t, err)
+	lis := bufconn.Listen(bufSize)
+	srv := server.New(cfg, store)
+	srv.StartOnListener(lis)
+	conn, err := grpc.NewClient(
+		"passthrough://bufnet",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return lis.DialContext(ctx)
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	cleanup := func() {
+		srv.Stop()
+		conn.Close()
+		_ = store.Close()
+	}
+	return conn, cleanup
 }
 
 func TestPing(t *testing.T) {
@@ -67,7 +103,42 @@ func TestPing(t *testing.T) {
 
 	resp, err := client.Ping(context.Background(), &runev1.PingRequest{})
 	require.NoError(t, err)
-	assert.Equal(t, "pong", resp.Message)
+	assert.Equal(t, "PONG", resp.Message)
+}
+
+func TestHealthLiveness(t *testing.T) {
+	conn, cleanup := newTestConn(t)
+	defer cleanup()
+
+	hc := healthpb.NewHealthClient(conn)
+	resp, err := hc.Check(context.Background(), &healthpb.HealthCheckRequest{Service: ""})
+	require.NoError(t, err)
+	assert.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.Status)
+}
+
+func TestHealthReadiness(t *testing.T) {
+	conn, cleanup := newTestConn(t)
+	defer cleanup()
+
+	hc := healthpb.NewHealthClient(conn)
+	resp, err := hc.Check(context.Background(), &healthpb.HealthCheckRequest{Service: "rune"})
+	require.NoError(t, err)
+	assert.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.Status)
+}
+
+func TestSetRequiresHeaderFirst(t *testing.T) {
+	client, cleanup := newTestClient(t)
+	defer cleanup()
+
+	stream, err := client.Set(context.Background())
+	require.NoError(t, err)
+	// Send a chunk without a header first — should get InvalidArgument.
+	require.NoError(t, stream.Send(&runev1.SetRequest{
+		Payload: &runev1.SetRequest_Chunk{Chunk: []byte("data")},
+	}))
+	_, err = stream.CloseAndRecv()
+	require.Error(t, err)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestSetGet(t *testing.T) {
@@ -231,6 +302,7 @@ func TestInfo(t *testing.T) {
 	assert.GreaterOrEqual(t, info.CacheHits, int64(1))
 	assert.GreaterOrEqual(t, info.CacheMisses, int64(1))
 	assert.Greater(t, info.StorageMaxBytes, int64(0))
+	assert.GreaterOrEqual(t, info.ActiveConnections, int64(0))
 }
 
 func TestLargePayload(t *testing.T) {

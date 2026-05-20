@@ -27,6 +27,7 @@ func New(cfg *config.Config, store storage.Storage) *Server {
 	s.tracker = &connTracker{}
 	s.grpcServer = grpc.NewServer(grpc.StatsHandler(s.tracker))
 	runev1.RegisterRuneServiceServer(s.grpcServer, &handler{srv: s})
+	registerHealth(s)
 	return s
 }
 
