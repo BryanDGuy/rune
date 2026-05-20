@@ -19,7 +19,7 @@ import (
 func newIntegrationClient(t *testing.T) (*runesdk.Client, func()) {
 	t.Helper()
 	conn, cleanup := testutil.NewBufconnConn(t, 4<<20)
-	return runesdk.NewFromConn(conn), cleanup
+	return runesdk.NewClient(conn), cleanup
 }
 
 func TestIntegration20MB(t *testing.T) {

@@ -9,7 +9,6 @@ import (
 	runev1 "github.com/bryandguy/rune/gen/rune/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 )
 
@@ -29,21 +28,8 @@ type Client struct {
 	grpc runev1.RuneServiceClient
 }
 
-// New creates a Client connected to addr (e.g. "localhost:7946").
-func New(addr string, opts ...grpc.DialOption) (*Client, error) {
-	defaults := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	}
-	conn, err := grpc.NewClient(addr, append(defaults, opts...)...)
-	if err != nil {
-		return nil, err
-	}
-	return &Client{conn: conn, grpc: runev1.NewRuneServiceClient(conn)}, nil
-}
-
-// NewFromConn creates a Client from an existing gRPC connection.
-// Useful for testing (e.g. with bufconn).
-func NewFromConn(conn *grpc.ClientConn) *Client {
+// NewClient creates a Client from an existing gRPC connection.
+func NewClient(conn *grpc.ClientConn) *Client {
 	return &Client{conn: conn, grpc: runev1.NewRuneServiceClient(conn)}
 }
 

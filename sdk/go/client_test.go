@@ -18,7 +18,7 @@ import (
 func newTestSDKClient(t *testing.T) (*runesdk.Client, func()) {
 	t.Helper()
 	conn, cleanup := testutil.NewBufconnConn(t, 1<<20)
-	return runesdk.NewFromConn(conn), cleanup
+	return runesdk.NewClient(conn), cleanup
 }
 
 // newTestRawAndSDKClient returns both an SDK client and a raw gRPC client
@@ -26,7 +26,7 @@ func newTestSDKClient(t *testing.T) (*runesdk.Client, func()) {
 func newTestRawAndSDKClient(t *testing.T) (*runesdk.Client, runev1.RuneServiceClient, func()) {
 	t.Helper()
 	conn, cleanup := testutil.NewBufconnConn(t, 1<<20)
-	return runesdk.NewFromConn(conn), runev1.NewRuneServiceClient(conn), cleanup
+	return runesdk.NewClient(conn), runev1.NewRuneServiceClient(conn), cleanup
 }
 
 func TestSDKSetGet(t *testing.T) {
