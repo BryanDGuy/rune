@@ -1,6 +1,7 @@
 package runesdk
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -98,7 +99,7 @@ func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	if err != nil {
 		cancel()
 		if errors.Is(err, io.EOF) {
-			return io.NopCloser(emptyReader{}), nil
+			return io.NopCloser(bytes.NewReader(nil)), nil
 		}
 		if status.Code(err) == codes.NotFound {
 			return nil, ErrNotFound
@@ -145,7 +146,3 @@ func (r *streamReader) Close() error {
 	return nil
 }
 
-// emptyReader is an io.Reader that always returns EOF.
-type emptyReader struct{}
-
-func (emptyReader) Read(_ []byte) (int, error) { return 0, io.EOF }
