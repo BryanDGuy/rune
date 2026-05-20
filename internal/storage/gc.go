@@ -35,7 +35,6 @@ func (s *BadgerStore) runGC(ctx context.Context) {
 	for ctx.Err() == nil {
 		err := s.db.RunValueLogGC(s.cfg.GCDiscardRatio)
 		if err == badger.ErrNoRewrite {
-			// Nothing left to compact — normal termination.
 			return
 		}
 		if err != nil {
@@ -57,10 +56,7 @@ func (s *BadgerStore) maintenanceLoop(ctx context.Context) {
 	heartbeat := time.NewTicker(s.cfg.GCInterval)
 	defer heartbeat.Stop()
 
-	pressureInterval := s.cfg.GCInterval / 10
-	if pressureInterval > 30*time.Second {
-		pressureInterval = 30 * time.Second
-	}
+	pressureInterval := min(s.cfg.GCInterval/10, 30*time.Second)
 	pressure := time.NewTicker(pressureInterval)
 	defer pressure.Stop()
 
@@ -71,14 +67,8 @@ func (s *BadgerStore) maintenanceLoop(ctx context.Context) {
 		case <-heartbeat.C:
 			s.runGC(ctx)
 		case <-pressure.C:
-			lsm, vlog := s.db.Size()
-			used := lsm + vlog
-			threshold := int64(float64(s.cfg.MaxStorageBytes) * s.cfg.EvictionThreshold)
-			if used >= threshold {
-				// Evict large cold keys first, then GC the freed value log space.
-				_ = checkEviction(ctx, s)
-				s.runGC(ctx)
-			}
+			_ = checkEviction(ctx, s)
+			s.runGC(ctx)
 		}
 	}
 }

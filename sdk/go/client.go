@@ -108,8 +108,10 @@ func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts ...SetOp
 // The caller must Close() the reader when done.
 // Returns ErrNotFound if the key does not exist.
 func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
+	ctx, cancel := context.WithCancel(ctx)
 	stream, err := c.grpc.Get(ctx, &runev1.GetRequest{Key: key})
 	if err != nil {
+		cancel()
 		if status.Code(err) == codes.NotFound {
 			return nil, ErrNotFound
 		}
@@ -119,8 +121,8 @@ func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	// Eagerly probe the first message so we can surface NotFound immediately.
 	resp, err := stream.Recv()
 	if err != nil {
+		cancel()
 		if err == io.EOF {
-			// Empty value stored — return an empty reader.
 			return io.NopCloser(io.Reader(emptyReader{})), nil
 		}
 		if status.Code(err) == codes.NotFound {
@@ -129,7 +131,7 @@ func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 		return nil, err
 	}
 
-	return &streamReader{stream: stream, buf: resp.Chunk}, nil
+	return &streamReader{stream: stream, buf: resp.Chunk, cancel: cancel}, nil
 }
 
 // Close closes the underlying gRPC connection.
@@ -144,6 +146,7 @@ func (c *Client) Close() error {
 type streamReader struct {
 	stream grpc.ServerStreamingClient[runev1.GetResponse]
 	buf    []byte
+	cancel context.CancelFunc
 }
 
 func (r *streamReader) Read(p []byte) (int, error) {
@@ -162,14 +165,9 @@ func (r *streamReader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// Close drains remaining messages to let the server complete cleanly.
 func (r *streamReader) Close() error {
-	for {
-		_, err := r.stream.Recv()
-		if err != nil {
-			return nil
-		}
-	}
+	r.cancel()
+	return nil
 }
 
 // emptyReader is an io.Reader that always returns EOF.

@@ -18,102 +18,29 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"net"
 	"testing"
 	"time"
 
 	runesdk "github.com/runicsigil/rune/sdk/go"
 
 	runev1 "github.com/runicsigil/rune/gen/rune/v1"
-	"github.com/runicsigil/rune/internal/config"
-	"github.com/runicsigil/rune/internal/server"
-	"github.com/runicsigil/rune/internal/storage"
+	"github.com/runicsigil/rune/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/test/bufconn"
 )
-
-const bufSize = 1 << 20 // 1MB bufconn buffer
 
 func newTestSDKClient(t *testing.T) (*runesdk.Client, func()) {
 	t.Helper()
-	cfg := &config.Config{
-		DataDir:            t.TempDir(),
-		MaxStorageBytes:    1 << 30,
-		EvictionThreshold:  0.8,
-		EvictionSizeWeight: 1.0,
-		EvictionAgeWeight:  1.0,
-		StreamChunkSize:    1 << 20,
-		GCInterval:         time.Hour,
-		GCDiscardRatio:     0.5,
-		TTLSweepInterval:   time.Hour,
-	}
-	store, err := storage.NewBadgerStore(cfg)
-	require.NoError(t, err)
-
-	lis := bufconn.Listen(bufSize)
-	srv := server.New(cfg, store)
-	srv.StartOnListener(lis)
-
-	conn, err := grpc.NewClient(
-		"passthrough://bufnet",
-		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-			return lis.DialContext(ctx)
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	require.NoError(t, err)
-
-	client := runesdk.NewFromConn(conn)
-	cleanup := func() {
-		client.Close()
-		srv.Stop()
-		store.Close()
-	}
-	return client, cleanup
+	conn, cleanup := testutil.NewBufconnConn(t, 1<<20)
+	return runesdk.NewFromConn(conn), cleanup
 }
 
-// newTestRawClient returns a low-level gRPC client sharing the same server as
-// a given SDK client — used in TestSDKWithTTL to inspect TTL directly.
+// newTestRawAndSDKClient returns both an SDK client and a raw gRPC client
+// sharing the same server — used in TestSDKWithTTL to inspect TTL directly.
 func newTestRawAndSDKClient(t *testing.T) (*runesdk.Client, runev1.RuneServiceClient, func()) {
 	t.Helper()
-	cfg := &config.Config{
-		DataDir:            t.TempDir(),
-		MaxStorageBytes:    1 << 30,
-		EvictionThreshold:  0.8,
-		EvictionSizeWeight: 1.0,
-		EvictionAgeWeight:  1.0,
-		StreamChunkSize:    1 << 20,
-		GCInterval:         time.Hour,
-		GCDiscardRatio:     0.5,
-		TTLSweepInterval:   time.Hour,
-	}
-	store, err := storage.NewBadgerStore(cfg)
-	require.NoError(t, err)
-
-	lis := bufconn.Listen(bufSize)
-	srv := server.New(cfg, store)
-	srv.StartOnListener(lis)
-
-	dialer := grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-		return lis.DialContext(ctx)
-	})
-	creds := grpc.WithTransportCredentials(insecure.NewCredentials())
-
-	conn, err := grpc.NewClient("passthrough://bufnet", dialer, creds)
-	require.NoError(t, err)
-
-	sdkClient := runesdk.NewFromConn(conn)
-	rawClient := runev1.NewRuneServiceClient(conn)
-
-	cleanup := func() {
-		sdkClient.Close()
-		srv.Stop()
-		store.Close()
-	}
-	return sdkClient, rawClient, cleanup
+	conn, cleanup := testutil.NewBufconnConn(t, 1<<20)
+	return runesdk.NewFromConn(conn), runev1.NewRuneServiceClient(conn), cleanup
 }
 
 func TestSDKSetGet(t *testing.T) {

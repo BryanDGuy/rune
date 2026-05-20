@@ -26,19 +26,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestStore(t *testing.T) *BadgerStore {
+func baseStorageTestConfig(t *testing.T) *config.Config {
 	t.Helper()
-	cfg := &config.Config{
+	return &config.Config{
 		DataDir:            t.TempDir(),
 		MaxStorageBytes:    1024 * 1024 * 1024,
 		EvictionThreshold:  0.8,
 		EvictionSizeWeight: 1.0,
 		EvictionAgeWeight:  1.0,
-		GCInterval:         time.Hour,       // prevent GC from running during tests
+		GCInterval:         time.Hour,
 		GCDiscardRatio:     0.5,
-		TTLSweepInterval:   time.Hour,       // prevent sweep from running during tests
+		TTLSweepInterval:   time.Hour,
 	}
-	s, err := NewBadgerStore(cfg)
+}
+
+func newTestStore(t *testing.T) *BadgerStore {
+	t.Helper()
+	s, err := NewBadgerStore(baseStorageTestConfig(t))
 	require.NoError(t, err)
 	t.Cleanup(func() { s.Close() })
 	return s

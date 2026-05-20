@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/runicsigil/rune/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,18 +45,15 @@ func TestEvictionWeightedScore(t *testing.T) {
 		lastAccessed: now.Add(-48 * time.Hour),
 	}
 
-	scoreLargeCold := weightedScore(largeCold, 1.0, 1.0)
-	scoreLargeHot := weightedScore(largeHot, 1.0, 1.0)
-	scoreSmallCold := weightedScore(smallCold, 1.0, 1.0)
+	scoreLargeCold := weightedScore(largeCold, 1.0, 1.0, now)
+	scoreLargeHot := weightedScore(largeHot, 1.0, 1.0, now)
+	scoreSmallCold := weightedScore(smallCold, 1.0, 1.0, now)
 
 	assert.Greater(t, scoreLargeCold, scoreLargeHot, "large+cold should score higher than large+hot")
 	assert.Greater(t, scoreLargeCold, scoreSmallCold, "large+cold should score higher than small+cold")
 	assert.Greater(t, scoreLargeHot, scoreSmallCold, "large+hot should score higher than small+cold")
 
-	// Verify the formula directly for a known case:
-	// size_gb = 500MB / 1e9 = 0.5
-	// hours = 48
-	// score = 0.5 * 1.0 * 48 * 1.0 = 24.0
+	// Verify the formula: size_gb=0.5, hours=48 → score=24.0
 	sizeGB := float64(largeCold.size) / 1e9
 	hours := now.Sub(largeCold.lastAccessed).Hours()
 	expected := sizeGB * 1.0 * hours * 1.0
@@ -72,9 +68,9 @@ func TestEvictionWeightedScoreWeights(t *testing.T) {
 		lastAccessed: now.Add(-2 * time.Hour),
 	}
 
-	score1 := weightedScore(entry, 1.0, 1.0) // expected: 1.0 * 2.0 = 2.0
-	score2 := weightedScore(entry, 2.0, 1.0) // expected: 2.0 * 2.0 = 4.0
-	score3 := weightedScore(entry, 1.0, 3.0) // expected: 1.0 * 6.0 = 6.0
+	score1 := weightedScore(entry, 1.0, 1.0, now) // expected: 1.0 * 2.0 = 2.0
+	score2 := weightedScore(entry, 2.0, 1.0, now) // expected: 2.0 * 2.0 = 4.0
+	score3 := weightedScore(entry, 1.0, 3.0, now) // expected: 1.0 * 6.0 = 6.0
 
 	assert.InDelta(t, 2.0, score1, 0.001)
 	assert.InDelta(t, 4.0, score2, 0.001)
@@ -85,16 +81,9 @@ func TestEvictionWeightedScoreWeights(t *testing.T) {
 // to make eviction easy to trigger in tests.
 func newEvictionTestStore(t *testing.T, maxBytes int64) *BadgerStore {
 	t.Helper()
-	cfg := &config.Config{
-		DataDir:            t.TempDir(),
-		MaxStorageBytes:    maxBytes,
-		EvictionThreshold:  0.5, // trigger at 50% so it's easy to hit
-		EvictionSizeWeight: 1.0,
-		EvictionAgeWeight:  1.0,
-		GCInterval:         time.Hour,
-		GCDiscardRatio:     0.5,
-		TTLSweepInterval:   time.Hour,
-	}
+	cfg := baseStorageTestConfig(t)
+	cfg.MaxStorageBytes = maxBytes
+	cfg.EvictionThreshold = 0.5
 	s, err := NewBadgerStore(cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })

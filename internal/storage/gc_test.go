@@ -19,24 +19,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/runicsigil/rune/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
-// newGCTestStore creates a store with very short GC / sweep intervals so the
-// tests don't sit idle waiting for tickers.
+// newGCTestStore creates a store with a short GC interval so tickers fire quickly.
 func newGCTestStore(t *testing.T) *BadgerStore {
 	t.Helper()
-	cfg := &config.Config{
-		DataDir:            t.TempDir(),
-		MaxStorageBytes:    1024 * 1024 * 1024,
-		EvictionThreshold:  0.8,
-		EvictionSizeWeight: 1.0,
-		EvictionAgeWeight:  1.0,
-		GCInterval:         100 * time.Millisecond,
-		GCDiscardRatio:     0.5,
-		TTLSweepInterval:   time.Hour,
-	}
+	cfg := baseStorageTestConfig(t)
+	cfg.GCInterval = 100 * time.Millisecond
 	s, err := NewBadgerStore(cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
@@ -91,17 +81,7 @@ func TestGCConcurrentCallsSkipped(t *testing.T) {
 // when the store is closed (context cancelled). If Close() returns within the
 // timeout the loop has exited cleanly.
 func TestGCLoopStopsOnCancel(t *testing.T) {
-	cfg := &config.Config{
-		DataDir:            t.TempDir(),
-		MaxStorageBytes:    1024 * 1024 * 1024,
-		EvictionThreshold:  0.8,
-		EvictionSizeWeight: 1.0,
-		EvictionAgeWeight:  1.0,
-		GCInterval:         time.Hour, // heartbeat won't fire during this test
-		GCDiscardRatio:     0.5,
-		TTLSweepInterval:   time.Hour,
-	}
-	s, err := NewBadgerStore(cfg)
+	s, err := NewBadgerStore(baseStorageTestConfig(t))
 	require.NoError(t, err)
 
 	done := make(chan error, 1)

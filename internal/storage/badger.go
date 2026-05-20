@@ -119,26 +119,27 @@ func (s *BadgerStore) Set(_ context.Context, key string, r io.Reader, ttlSeconds
 
 func (s *BadgerStore) Delete(_ context.Context, keys ...string) (int64, error) {
 	var deleted int64
-	for _, key := range keys {
-		var didExist bool
-		err := s.db.Update(func(txn *badger.Txn) error {
-			didExist = false
+	err := s.db.Update(func(txn *badger.Txn) error {
+		deleted = 0
+		for _, key := range keys {
 			_, err := txn.Get([]byte(key))
 			if errors.Is(err, badger.ErrKeyNotFound) {
-				return nil
+				continue
 			}
 			if err != nil {
 				return err
 			}
-			didExist = true
-			return txn.Delete([]byte(key))
-		})
-		if err != nil {
-			return deleted, err
-		}
-		if didExist {
+			if err := txn.Delete([]byte(key)); err != nil {
+				return err
+			}
 			deleted++
 		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	for _, key := range keys {
 		s.eviction.remove(key)
 	}
 	return deleted, nil
@@ -161,9 +162,6 @@ func (s *BadgerStore) Exists(_ context.Context, keys ...string) (int64, error) {
 }
 
 func (s *BadgerStore) Expire(_ context.Context, key string, ttlSeconds int64) (bool, error) {
-	if ttlSeconds <= 0 {
-		return false, fmt.Errorf("ttlSeconds must be positive, got %d", ttlSeconds)
-	}
 	var found bool
 	err := s.db.Update(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
@@ -242,17 +240,13 @@ func (s *BadgerStore) Info(_ context.Context) (StorageInfo, error) {
 
 func (s *BadgerStore) initEvictionIndex() error {
 	return s.db.View(func(txn *badger.Txn) error {
-		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		it := txn.NewIterator(opts)
 		defer it.Close()
 		for it.Rewind(); it.Valid(); it.Next() {
 			item := it.Item()
-			key := string(item.KeyCopy(nil))
-			if err := item.Value(func(val []byte) error {
-				s.eviction.recordSet(key, int64(len(val)))
-				return nil
-			}); err != nil {
-				return err
-			}
+			s.eviction.recordSet(string(item.KeyCopy(nil)), item.EstimatedSize())
 		}
 		return nil
 	})

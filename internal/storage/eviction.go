@@ -58,45 +58,48 @@ func (e *evictionIndex) remove(key string) {
 	delete(e.entries, key)
 }
 
-// weightedScore computes the eviction priority score for an entry.
+// weightedScore computes the eviction priority score for an entry at time now.
 // Higher score = evicted first (large, cold keys).
 //
 //	score = (size_bytes / 1e9 * sizeWeight) * (hours_since_last_access * ageWeight)
-func weightedScore(entry *evictionEntry, sizeWeight, ageWeight float64) float64 {
+func weightedScore(entry *evictionEntry, sizeWeight, ageWeight float64, now time.Time) float64 {
 	sizeGB := float64(entry.size) / 1e9
-	hoursSinceAccess := time.Since(entry.lastAccessed).Hours()
+	hoursSinceAccess := now.Sub(entry.lastAccessed).Hours()
 	return (sizeGB * sizeWeight) * (hoursSinceAccess * ageWeight)
 }
 
-// candidate pairs a key with its computed score for sorting.
 type candidate struct {
 	key   string
 	score float64
 }
 
+// snapshot scores all entries under RLock, sampling time once.
+func (e *evictionIndex) snapshot(sizeWeight, ageWeight float64) []candidate {
+	now := time.Now()
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	cs := make([]candidate, 0, len(e.entries))
+	for key, entry := range e.entries {
+		cs = append(cs, candidate{key: key, score: weightedScore(entry, sizeWeight, ageWeight, now)})
+	}
+	return cs
+}
+
 // checkEviction evaluates storage pressure and evicts keys by descending score
-// until usage drops below the configured threshold. It is safe to call
-// concurrently; the eviction index snapshot is taken under RLock and BadgerDB
-// deletes happen outside the lock.
+// until usage drops below the configured threshold.
 func checkEviction(ctx context.Context, store *BadgerStore) error {
 	lsm, vlog := store.db.Size()
-	used := lsm + vlog
 	threshold := int64(float64(store.cfg.MaxStorageBytes) * store.cfg.EvictionThreshold)
 
-	if used < threshold {
+	if lsm+vlog < threshold {
 		return nil
 	}
 
-	// Snapshot the index under RLock.
-	store.eviction.mu.RLock()
-	candidates := make([]candidate, 0, len(store.eviction.entries))
-	for key, entry := range store.eviction.entries {
-		score := weightedScore(entry, store.cfg.EvictionSizeWeight, store.cfg.EvictionAgeWeight)
-		candidates = append(candidates, candidate{key: key, score: score})
+	candidates := store.eviction.snapshot(store.cfg.EvictionSizeWeight, store.cfg.EvictionAgeWeight)
+	if len(candidates) == 0 {
+		return nil
 	}
-	store.eviction.mu.RUnlock()
 
-	// Sort descending: highest score (large+cold) first.
 	sort.Slice(candidates, func(i, j int) bool {
 		return candidates[i].score > candidates[j].score
 	})

@@ -18,97 +18,29 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"net"
 	"testing"
-	"time"
 
 	runev1 "github.com/runicsigil/rune/gen/rune/v1"
-	"github.com/runicsigil/rune/internal/config"
-	"github.com/runicsigil/rune/internal/server"
-	"github.com/runicsigil/rune/internal/storage"
+	"github.com/runicsigil/rune/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/test/bufconn"
 )
 
 const bufSize = 1 << 20 // 1MB bufconn buffer
 
-func newTestClient(t *testing.T) (runev1.RuneServiceClient, func()) {
-	t.Helper()
-	cfg := &config.Config{
-		DataDir:            t.TempDir(),
-		MaxStorageBytes:    1 << 30,
-		EvictionThreshold:  0.8,
-		EvictionSizeWeight: 1.0,
-		EvictionAgeWeight:  1.0,
-		StreamChunkSize:    1 << 20, // 1MB chunks
-		GCInterval:         time.Hour,
-		GCDiscardRatio:     0.5,
-		TTLSweepInterval:   time.Hour,
-	}
-	store, err := storage.NewBadgerStore(cfg)
-	require.NoError(t, err)
-
-	lis := bufconn.Listen(bufSize)
-	srv := server.New(cfg, store)
-	srv.StartOnListener(lis)
-
-	conn, err := grpc.NewClient(
-		"passthrough://bufnet",
-		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-			return lis.DialContext(ctx)
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	require.NoError(t, err)
-
-	client := runev1.NewRuneServiceClient(conn)
-	// Stop order: GracefulStop waits for in-flight RPCs, then close conn and store.
-	cleanup := func() {
-		srv.Stop()
-		conn.Close()
-		_ = store.Close()
-	}
-	return client, cleanup
-}
-
 func newTestConn(t *testing.T) (*grpc.ClientConn, func()) {
 	t.Helper()
-	cfg := &config.Config{
-		DataDir:            t.TempDir(),
-		MaxStorageBytes:    1 << 30,
-		EvictionThreshold:  0.8,
-		EvictionSizeWeight: 1.0,
-		EvictionAgeWeight:  1.0,
-		StreamChunkSize:    1 << 20,
-		GCInterval:         time.Hour,
-		GCDiscardRatio:     0.5,
-		TTLSweepInterval:   time.Hour,
-	}
-	store, err := storage.NewBadgerStore(cfg)
-	require.NoError(t, err)
-	lis := bufconn.Listen(bufSize)
-	srv := server.New(cfg, store)
-	srv.StartOnListener(lis)
-	conn, err := grpc.NewClient(
-		"passthrough://bufnet",
-		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-			return lis.DialContext(ctx)
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	require.NoError(t, err)
-	cleanup := func() {
-		srv.Stop()
-		conn.Close()
-		_ = store.Close()
-	}
-	return conn, cleanup
+	return testutil.NewBufconnConn(t, bufSize)
+}
+
+func newTestClient(t *testing.T) (runev1.RuneServiceClient, func()) {
+	t.Helper()
+	conn, cleanup := newTestConn(t)
+	return runev1.NewRuneServiceClient(conn), cleanup
 }
 
 func TestPing(t *testing.T) {
@@ -335,10 +267,7 @@ func TestLargePayload(t *testing.T) {
 
 	chunkSize := 1 << 20
 	for i := 0; i < len(payload); i += chunkSize {
-		end := i + chunkSize
-		if end > len(payload) {
-			end = len(payload)
-		}
+		end := min(i+chunkSize, len(payload))
 		require.NoError(t, setStream.Send(&runev1.SetRequest{
 			Payload: &runev1.SetRequest_Chunk{Chunk: payload[i:end]},
 		}))

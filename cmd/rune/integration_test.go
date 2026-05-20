@@ -18,57 +18,22 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"net"
 	"testing"
 	"time"
 
-	"github.com/runicsigil/rune/internal/config"
 	"github.com/runicsigil/rune/internal/server"
 	"github.com/runicsigil/rune/internal/storage"
+	"github.com/runicsigil/rune/internal/testutil"
 	runesdk "github.com/runicsigil/rune/sdk/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 )
 
 func newIntegrationClient(t *testing.T) (*runesdk.Client, func()) {
 	t.Helper()
-	cfg := &config.Config{
-		DataDir:            t.TempDir(),
-		MaxStorageBytes:    1 << 30, // 1GB
-		EvictionThreshold:  0.8,
-		EvictionSizeWeight: 1.0,
-		EvictionAgeWeight:  1.0,
-		StreamChunkSize:    1 << 20, // 1MB chunks
-		GCInterval:         time.Hour,
-		GCDiscardRatio:     0.5,
-		TTLSweepInterval:   time.Hour,
-	}
-	store, err := storage.NewBadgerStore(cfg)
-	require.NoError(t, err)
-
-	lis := bufconn.Listen(4 << 20) // 4MB bufconn buffer
-	srv := server.New(cfg, store)
-	srv.StartOnListener(lis)
-
-	conn, err := grpc.NewClient(
-		"passthrough://bufnet",
-		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-			return lis.DialContext(ctx)
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	require.NoError(t, err)
-
-	client := runesdk.NewFromConn(conn)
-	cleanup := func() {
-		_ = client.Close()
-		srv.Stop()
-		_ = store.Close()
-	}
-	return client, cleanup
+	conn, cleanup := testutil.NewBufconnConn(t, 4<<20)
+	return runesdk.NewFromConn(conn), cleanup
 }
 
 func TestIntegration20MB(t *testing.T) {
@@ -115,17 +80,7 @@ func TestIntegrationWithTTL(t *testing.T) {
 }
 
 func TestIntegrationGracefulShutdown(t *testing.T) {
-	cfg := &config.Config{
-		DataDir:            t.TempDir(),
-		MaxStorageBytes:    1 << 30,
-		EvictionThreshold:  0.8,
-		EvictionSizeWeight: 1.0,
-		EvictionAgeWeight:  1.0,
-		StreamChunkSize:    1 << 20,
-		GCInterval:         time.Hour,
-		GCDiscardRatio:     0.5,
-		TTLSweepInterval:   time.Hour,
-	}
+	cfg := testutil.BaseConfig(t)
 	store, err := storage.NewBadgerStore(cfg)
 	require.NoError(t, err)
 

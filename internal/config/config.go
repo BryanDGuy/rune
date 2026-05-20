@@ -42,11 +42,10 @@ type Config struct {
 
 func defaults() *Config {
 	return &Config{
-		Port:               7946,
-		DataDir:            "/var/rune/data",
-		MaxStorage:         "100GB",
-		MaxStorageBytes:    107374182400,
-		EvictionThreshold:  0.8,
+		Port:              7946,
+		DataDir:           "/var/rune/data",
+		MaxStorage:        "100GB",
+		EvictionThreshold: 0.8,
 		EvictionSizeWeight: 1.0,
 		EvictionAgeWeight:  1.0,
 		StreamChunkSize:    1024 * 1024, // 1MB
@@ -69,13 +68,14 @@ func LoadConfig(path string) (*Config, error) {
 		if err := yaml.Unmarshal(data, cfg); err != nil {
 			return nil, fmt.Errorf("parse config: %w", err)
 		}
-		if cfg.MaxStorage != "" {
-			b, err := parseBytes(cfg.MaxStorage)
-			if err != nil {
-				return nil, fmt.Errorf("parse max-storage: %w", err)
-			}
-			cfg.MaxStorageBytes = b
+	}
+
+	if cfg.MaxStorage != "" {
+		b, err := parseBytes(cfg.MaxStorage)
+		if err != nil {
+			return nil, fmt.Errorf("parse max-storage: %w", err)
 		}
+		cfg.MaxStorageBytes = b
 	}
 
 	if v := os.Getenv("RUNE_PORT"); v != "" {
@@ -109,8 +109,8 @@ func parseBytes(s string) (int64, error) {
 	}
 	upper := strings.ToUpper(s)
 	for _, entry := range suffixes {
-		if strings.HasSuffix(upper, entry.suffix) {
-			n, err := strconv.ParseInt(strings.TrimSuffix(upper, entry.suffix), 10, 64)
+		if trimmed, ok := strings.CutSuffix(upper, entry.suffix); ok {
+			n, err := strconv.ParseInt(trimmed, 10, 64)
 			if err != nil {
 				return 0, fmt.Errorf("invalid size %q", s)
 			}

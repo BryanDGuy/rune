@@ -27,7 +27,6 @@ import (
 	"google.golang.org/grpc/stats"
 )
 
-// Server wraps the gRPC server and its dependencies.
 type Server struct {
 	cfg        *config.Config
 	store      storage.Storage
@@ -35,7 +34,7 @@ type Server struct {
 	tracker    *connTracker
 }
 
-// New creates a Server. Call Start to begin accepting connections.
+// New creates a Server. Call Start or StartOnListener to begin accepting connections.
 func New(cfg *config.Config, store storage.Storage) *Server {
 	s := &Server{cfg: cfg, store: store}
 	s.tracker = &connTracker{}
@@ -45,27 +44,24 @@ func New(cfg *config.Config, store storage.Storage) *Server {
 	return s
 }
 
-// Start listens on cfg.Port and serves gRPC in a goroutine.
 func (s *Server) Start() error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.cfg.Port))
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
-	go s.grpcServer.Serve(lis) //nolint:errcheck
+	go func() { _ = s.grpcServer.Serve(lis) }()
 	return nil
 }
 
 // StartOnListener serves on an existing listener (useful for testing with bufconn).
 func (s *Server) StartOnListener(lis net.Listener) {
-	go s.grpcServer.Serve(lis) //nolint:errcheck
+	go func() { _ = s.grpcServer.Serve(lis) }()
 }
 
-// Stop gracefully stops the gRPC server.
 func (s *Server) Stop() {
 	s.grpcServer.GracefulStop()
 }
 
-// ActiveConns returns the number of currently active connections.
 func (s *Server) ActiveConns() int64 {
 	return s.tracker.conns.Load()
 }
