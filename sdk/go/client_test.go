@@ -21,10 +21,10 @@ import (
 	"testing"
 	"time"
 
-	runesdk "github.com/runicsigil/rune/sdk/go"
+	runesdk "github.com/bryandguy/rune/sdk/go"
 
-	runev1 "github.com/runicsigil/rune/gen/rune/v1"
-	"github.com/runicsigil/rune/internal/testutil"
+	runev1 "github.com/bryandguy/rune/gen/rune/v1"
+	"github.com/bryandguy/rune/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

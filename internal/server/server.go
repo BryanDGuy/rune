@@ -20,9 +20,9 @@ import (
 	"net"
 	"sync/atomic"
 
-	runev1 "github.com/runicsigil/rune/gen/rune/v1"
-	"github.com/runicsigil/rune/internal/config"
-	"github.com/runicsigil/rune/internal/storage"
+	runev1 "github.com/bryandguy/rune/gen/rune/v1"
+	"github.com/bryandguy/rune/internal/config"
+	"github.com/bryandguy/rune/internal/storage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/stats"
 )

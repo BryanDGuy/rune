@@ -41,7 +41,7 @@ go build -o rune ./cmd/rune
 ## Go SDK
 
 ```go
-import runesdk "github.com/runicsigil/rune/sdk/go"
+import runesdk "github.com/bryandguy/rune/sdk/go"
 
 client, err := runesdk.New("localhost:7946")
 if err != nil { ... }

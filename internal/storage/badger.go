@@ -25,7 +25,7 @@ import (
 	"time"
 
 	badger "github.com/dgraph-io/badger/v4"
-	"github.com/runicsigil/rune/internal/config"
+	"github.com/bryandguy/rune/internal/config"
 )
 
 type BadgerStore struct {

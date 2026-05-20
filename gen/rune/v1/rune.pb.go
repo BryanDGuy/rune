@@ -993,7 +993,7 @@ const file_rune_v1_rune_proto_rawDesc = "" +
 	"\x06Expire\x12\x16.rune.v1.ExpireRequest\x1a\x17.rune.v1.ExpireResponse\x120\n" +
 	"\x03TTL\x12\x13.rune.v1.TTLRequest\x1a\x14.rune.v1.TTLResponse\x12<\n" +
 	"\aPersist\x12\x17.rune.v1.PersistRequest\x1a\x18.rune.v1.PersistResponse\x123\n" +
-	"\x04Info\x12\x14.rune.v1.InfoRequest\x1a\x15.rune.v1.InfoResponseB/Z-github.com/runicsigil/rune/gen/rune/v1;runev1b\x06proto3"
+	"\x04Info\x12\x14.rune.v1.InfoRequest\x1a\x15.rune.v1.InfoResponseB.Z,github.com/bryandguy/rune/gen/rune/v1;runev1b\x06proto3"
 
 var (
 	file_rune_v1_rune_proto_rawDescOnce sync.Once

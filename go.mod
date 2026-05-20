@@ -1,4 +1,4 @@
-module github.com/runicsigil/rune
+module github.com/bryandguy/rune
 
 go 1.25.0
 

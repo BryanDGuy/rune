@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/runicsigil/rune/internal/config"
+	"github.com/bryandguy/rune/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

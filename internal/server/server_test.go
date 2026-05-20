@@ -20,8 +20,8 @@ import (
 	"io"
 	"testing"
 
-	runev1 "github.com/runicsigil/rune/gen/rune/v1"
-	"github.com/runicsigil/rune/internal/testutil"
+	runev1 "github.com/bryandguy/rune/gen/rune/v1"
+	"github.com/bryandguy/rune/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
