@@ -111,7 +111,10 @@ func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 
 // Close closes the underlying gRPC connection.
 func (c *Client) Close() error {
-	return c.conn.Close()
+	if c.conn != nil {
+		return c.conn.Close()
+	}
+	return nil
 }
 
 // streamReader implements io.ReadCloser over a server-streaming gRPC call.
