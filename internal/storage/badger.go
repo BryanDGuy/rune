@@ -15,6 +15,11 @@ import (
 	badger "github.com/dgraph-io/badger/v4"
 )
 
+const (
+	ttlNoExpiry = int64(-1) // key exists with no expiration
+	ttlNotFound = int64(-2) // key does not exist
+)
+
 type BadgerStore struct {
 	db             *badger.DB
 	cfg            *config.Config
@@ -105,9 +110,9 @@ func (s *BadgerStore) Set(_ context.Context, key string, r io.Reader, ttlSeconds
 }
 
 func (s *BadgerStore) Delete(_ context.Context, keys ...string) (int64, error) {
-	var deleted int64
+	var deleted []string
 	err := s.db.Update(func(txn *badger.Txn) error {
-		deleted = 0
+		deleted = deleted[:0]
 		for _, key := range keys {
 			_, err := txn.Get([]byte(key))
 			if errors.Is(err, badger.ErrKeyNotFound) {
@@ -119,17 +124,17 @@ func (s *BadgerStore) Delete(_ context.Context, keys ...string) (int64, error) {
 			if err := txn.Delete([]byte(key)); err != nil {
 				return err
 			}
-			deleted++
+			deleted = append(deleted, key)
 		}
 		return nil
 	})
 	if err != nil {
 		return 0, err
 	}
-	for _, key := range keys {
+	for _, key := range deleted {
 		s.eviction.remove(key)
 	}
-	return deleted, nil
+	return int64(len(deleted)), nil
 }
 
 func (s *BadgerStore) Exists(_ context.Context, keys ...string) (int64, error) {
@@ -173,7 +178,7 @@ func (s *BadgerStore) TTL(_ context.Context, key string) (int64, error) {
 	err := s.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
 		if errors.Is(err, badger.ErrKeyNotFound) {
-			ttlSecs = -2
+			ttlSecs = ttlNotFound
 			return nil
 		}
 		if err != nil {
@@ -181,17 +186,17 @@ func (s *BadgerStore) TTL(_ context.Context, key string) (int64, error) {
 		}
 		expiresAt := item.ExpiresAt()
 		if expiresAt == 0 {
-			ttlSecs = -1
+			ttlSecs = ttlNoExpiry
 			return nil
 		}
 		if expiresAt > math.MaxInt64 {
-			ttlSecs = -1
+			ttlSecs = ttlNoExpiry
 			return nil
 		}
 		remaining := time.Until(time.Unix(int64(expiresAt), 0))
 		if remaining <= 0 {
 			// Key has expired but BadgerDB hasn't reaped it yet — treat as not found.
-			ttlSecs = -2
+			ttlSecs = ttlNotFound
 			return nil
 		}
 		ttlSecs = int64(remaining.Seconds())
