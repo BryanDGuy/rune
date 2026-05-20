@@ -88,9 +88,9 @@ func TestEvictionTriggersUnderPressure(t *testing.T) {
 	ctx := context.Background()
 
 	// Write three keys so they exist in BadgerDB.
-	require.NoError(t, s.Set(ctx, "hot-small", bytes.NewReader(make([]byte, 100)), 0))
-	require.NoError(t, s.Set(ctx, "hot-large", bytes.NewReader(make([]byte, 100)), 0))
-	require.NoError(t, s.Set(ctx, "cold-large", bytes.NewReader(make([]byte, 100)), 0))
+	require.NoError(t, s.Set("hot-small", bytes.NewReader(make([]byte, 100)), 0))
+	require.NoError(t, s.Set("hot-large", bytes.NewReader(make([]byte, 100)), 0))
+	require.NoError(t, s.Set("cold-large", bytes.NewReader(make([]byte, 100)), 0))
 
 	// Overwrite eviction index entries with controlled sizes and access times
 	// to produce predictable scores regardless of when the test runs.
@@ -116,7 +116,7 @@ func TestEvictionTriggersUnderPressure(t *testing.T) {
 	require.NoError(t, err)
 
 	// cold-large has the highest score and should be gone.
-	_, errCold := s.Get(ctx, "cold-large")
+	_, errCold := s.Get("cold-large")
 	require.ErrorIs(t, errCold, ErrNotFound, "cold-large should have been evicted")
 
 	// At least one key was evicted.
@@ -132,8 +132,8 @@ func TestEvictionCounterIncrements(t *testing.T) {
 	ctx := context.Background()
 
 	// Write two keys.
-	require.NoError(t, s.Set(ctx, "key-a", bytes.NewReader(make([]byte, 50)), 0))
-	require.NoError(t, s.Set(ctx, "key-b", bytes.NewReader(make([]byte, 50)), 0))
+	require.NoError(t, s.Set("key-a", bytes.NewReader(make([]byte, 50)), 0))
+	require.NoError(t, s.Set("key-b", bytes.NewReader(make([]byte, 50)), 0))
 
 	// Assign large sizes + old access so both get evicted.
 	now := time.Now()
@@ -169,13 +169,13 @@ func TestEvictionNoOpBelowThreshold(t *testing.T) {
 	s := newTestStore(t) // uses 1 GB max, 0.8 threshold → 800 MB trigger
 
 	ctx := context.Background()
-	require.NoError(t, s.Set(ctx, "key1", bytes.NewReader(make([]byte, 100)), 0))
+	require.NoError(t, s.Set("key1", bytes.NewReader(make([]byte, 100)), 0))
 
 	err := checkEviction(ctx, s)
 	require.NoError(t, err)
 
 	assert.Equal(t, int64(0), s.evictionsTotal.Load(), "no evictions expected below threshold")
 
-	_, err = s.Get(ctx, "key1")
+	_, err = s.Get("key1")
 	assert.NoError(t, err, "key1 should still exist")
 }

@@ -23,7 +23,7 @@ func (h *handler) Ping(_ context.Context, _ *runev1.PingRequest) (*runev1.PingRe
 }
 
 func (h *handler) Get(req *runev1.GetRequest, stream grpc.ServerStreamingServer[runev1.GetResponse]) error {
-	r, err := h.srv.store.Get(stream.Context(), req.Key)
+	r, err := h.srv.store.Get(req.Key)
 	if errors.Is(err, storage.ErrNotFound) {
 		return status.Error(codes.NotFound, "key not found")
 	}
@@ -68,7 +68,7 @@ func (h *handler) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, runev
 	// Run store.Set in a goroutine reading from the pipe.
 	setErr := make(chan error, 1)
 	go func() {
-		setErr <- h.srv.store.Set(stream.Context(), key, pr, ttl)
+		setErr <- h.srv.store.Set(key, pr, ttl)
 	}()
 
 	// Forward subsequent chunk messages to the pipe writer.
@@ -106,7 +106,7 @@ func (h *handler) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, runev
 }
 
 func (h *handler) Delete(ctx context.Context, req *runev1.DeleteRequest) (*runev1.DeleteResponse, error) {
-	n, err := h.srv.store.Delete(ctx, req.Keys...)
+	n, err := h.srv.store.Delete(req.Keys...)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "delete: %v", err)
 	}
@@ -114,7 +114,7 @@ func (h *handler) Delete(ctx context.Context, req *runev1.DeleteRequest) (*runev
 }
 
 func (h *handler) Exists(ctx context.Context, req *runev1.ExistsRequest) (*runev1.ExistsResponse, error) {
-	n, err := h.srv.store.Exists(ctx, req.Keys...)
+	n, err := h.srv.store.Exists(req.Keys...)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "exists: %v", err)
 	}
@@ -125,7 +125,7 @@ func (h *handler) Expire(ctx context.Context, req *runev1.ExpireRequest) (*runev
 	if req.TtlSeconds <= 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "ttl_seconds must be positive, got %d", req.TtlSeconds)
 	}
-	ok, err := h.srv.store.Expire(ctx, req.Key, req.TtlSeconds)
+	ok, err := h.srv.store.Expire(req.Key, req.TtlSeconds)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "expire: %v", err)
 	}
@@ -133,7 +133,7 @@ func (h *handler) Expire(ctx context.Context, req *runev1.ExpireRequest) (*runev
 }
 
 func (h *handler) TTL(ctx context.Context, req *runev1.TTLRequest) (*runev1.TTLResponse, error) {
-	ttl, err := h.srv.store.TTL(ctx, req.Key)
+	ttl, err := h.srv.store.TTL(req.Key)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "ttl: %v", err)
 	}
@@ -141,7 +141,7 @@ func (h *handler) TTL(ctx context.Context, req *runev1.TTLRequest) (*runev1.TTLR
 }
 
 func (h *handler) Persist(ctx context.Context, req *runev1.PersistRequest) (*runev1.PersistResponse, error) {
-	ok, err := h.srv.store.Persist(ctx, req.Key)
+	ok, err := h.srv.store.Persist(req.Key)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "persist: %v", err)
 	}
@@ -149,7 +149,7 @@ func (h *handler) Persist(ctx context.Context, req *runev1.PersistRequest) (*run
 }
 
 func (h *handler) Info(ctx context.Context, _ *runev1.InfoRequest) (*runev1.InfoResponse, error) {
-	info, err := h.srv.store.Info(ctx)
+	info, err := h.srv.store.Info()
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "info: %v", err)
 	}

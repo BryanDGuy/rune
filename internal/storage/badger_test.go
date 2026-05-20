@@ -2,7 +2,6 @@ package storage
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"testing"
 	"time"
@@ -36,16 +35,16 @@ func newTestStore(t *testing.T) *BadgerStore {
 
 func TestBadgerGetNotFound(t *testing.T) {
 	s := newTestStore(t)
-	_, err := s.Get(context.Background(), "missing")
+	_, err := s.Get("missing")
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestBadgerSetGet(t *testing.T) {
 	s := newTestStore(t)
 	data := []byte("hello rune")
-	require.NoError(t, s.Set(context.Background(), "k1", bytes.NewReader(data), 0))
+	require.NoError(t, s.Set("k1", bytes.NewReader(data), 0))
 
-	r, err := s.Get(context.Background(), "k1")
+	r, err := s.Get("k1")
 	require.NoError(t, err)
 	defer r.Close()
 	got, err := io.ReadAll(r)
@@ -55,22 +54,22 @@ func TestBadgerSetGet(t *testing.T) {
 
 func TestBadgerDelete(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Set(context.Background(), "k1", bytes.NewReader([]byte("v")), 0))
-	require.NoError(t, s.Set(context.Background(), "k2", bytes.NewReader([]byte("v")), 0))
+	require.NoError(t, s.Set("k1", bytes.NewReader([]byte("v")), 0))
+	require.NoError(t, s.Set("k2", bytes.NewReader([]byte("v")), 0))
 
-	n, err := s.Delete(context.Background(), "k1", "k2", "missing")
+	n, err := s.Delete("k1", "k2", "missing")
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), n)
 
-	_, err = s.Get(context.Background(), "k1")
+	_, err = s.Get("k1")
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestBadgerExists(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Set(context.Background(), "k1", bytes.NewReader([]byte("v")), 0))
+	require.NoError(t, s.Set("k1", bytes.NewReader([]byte("v")), 0))
 
-	n, err := s.Exists(context.Background(), "k1", "missing")
+	n, err := s.Exists("k1", "missing")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), n)
 }
@@ -78,58 +77,58 @@ func TestBadgerExists(t *testing.T) {
 func TestBadgerTTL(t *testing.T) {
 	s := newTestStore(t)
 
-	ttl, err := s.TTL(context.Background(), "missing")
+	ttl, err := s.TTL("missing")
 	require.NoError(t, err)
 	assert.Equal(t, int64(-2), ttl)
 
-	require.NoError(t, s.Set(context.Background(), "k1", bytes.NewReader([]byte("v")), 0))
-	ttl, err = s.TTL(context.Background(), "k1")
+	require.NoError(t, s.Set("k1", bytes.NewReader([]byte("v")), 0))
+	ttl, err = s.TTL("k1")
 	require.NoError(t, err)
 	assert.Equal(t, int64(-1), ttl)
 
-	require.NoError(t, s.Set(context.Background(), "k2", bytes.NewReader([]byte("v")), 60))
-	ttl, err = s.TTL(context.Background(), "k2")
+	require.NoError(t, s.Set("k2", bytes.NewReader([]byte("v")), 60))
+	ttl, err = s.TTL("k2")
 	require.NoError(t, err)
 	assert.InDelta(t, int64(60), ttl, 2)
 }
 
 func TestBadgerExpire(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Set(context.Background(), "k1", bytes.NewReader([]byte("v")), 0))
+	require.NoError(t, s.Set("k1", bytes.NewReader([]byte("v")), 0))
 
-	ok, err := s.Expire(context.Background(), "k1", 120)
+	ok, err := s.Expire("k1", 120)
 	require.NoError(t, err)
 	assert.True(t, ok)
 
-	ttl, err := s.TTL(context.Background(), "k1")
+	ttl, err := s.TTL("k1")
 	require.NoError(t, err)
 	assert.InDelta(t, int64(120), ttl, 2)
 
-	ok, err = s.Expire(context.Background(), "missing", 120)
+	ok, err = s.Expire("missing", 120)
 	require.NoError(t, err)
 	assert.False(t, ok)
 }
 
 func TestBadgerPersist(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Set(context.Background(), "k1", bytes.NewReader([]byte("v")), 60))
+	require.NoError(t, s.Set("k1", bytes.NewReader([]byte("v")), 60))
 
-	ok, err := s.Persist(context.Background(), "k1")
+	ok, err := s.Persist("k1")
 	require.NoError(t, err)
 	assert.True(t, ok)
 
-	ttl, err := s.TTL(context.Background(), "k1")
+	ttl, err := s.TTL("k1")
 	require.NoError(t, err)
 	assert.Equal(t, int64(-1), ttl)
 }
 
 func TestBadgerInfo(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Set(context.Background(), "k1", bytes.NewReader([]byte("value")), 0))
-	_, _ = s.Get(context.Background(), "k1")
-	_, _ = s.Get(context.Background(), "missing")
+	require.NoError(t, s.Set("k1", bytes.NewReader([]byte("value")), 0))
+	_, _ = s.Get("k1")
+	_, _ = s.Get("missing")
 
-	info, err := s.Info(context.Background())
+	info, err := s.Info()
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), info.Hits)
 	assert.Equal(t, int64(1), info.Misses)

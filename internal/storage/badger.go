@@ -66,7 +66,7 @@ func (s *BadgerStore) Close() error {
 	return s.db.Close()
 }
 
-func (s *BadgerStore) Get(_ context.Context, key string) (io.ReadCloser, error) {
+func (s *BadgerStore) Get(key string) (io.ReadCloser, error) {
 	var buf []byte
 	err := s.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
@@ -91,7 +91,7 @@ func (s *BadgerStore) Get(_ context.Context, key string) (io.ReadCloser, error) 
 	return io.NopCloser(bytes.NewReader(buf)), nil
 }
 
-func (s *BadgerStore) Set(_ context.Context, key string, r io.Reader, ttlSeconds int64) error {
+func (s *BadgerStore) Set(key string, r io.Reader, ttlSeconds int64) error {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return fmt.Errorf("read value: %w", err)
@@ -109,7 +109,7 @@ func (s *BadgerStore) Set(_ context.Context, key string, r io.Reader, ttlSeconds
 	return nil
 }
 
-func (s *BadgerStore) Delete(_ context.Context, keys ...string) (int64, error) {
+func (s *BadgerStore) Delete(keys ...string) (int64, error) {
 	var deleted []string
 	err := s.db.Update(func(txn *badger.Txn) error {
 		deleted = deleted[:0]
@@ -137,7 +137,7 @@ func (s *BadgerStore) Delete(_ context.Context, keys ...string) (int64, error) {
 	return int64(len(deleted)), nil
 }
 
-func (s *BadgerStore) Exists(_ context.Context, keys ...string) (int64, error) {
+func (s *BadgerStore) Exists(keys ...string) (int64, error) {
 	var count int64
 	err := s.db.View(func(txn *badger.Txn) error {
 		for _, key := range keys {
@@ -153,7 +153,7 @@ func (s *BadgerStore) Exists(_ context.Context, keys ...string) (int64, error) {
 	return count, err
 }
 
-func (s *BadgerStore) Expire(_ context.Context, key string, ttlSeconds int64) (bool, error) {
+func (s *BadgerStore) Expire(key string, ttlSeconds int64) (bool, error) {
 	var found bool
 	err := s.db.Update(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
@@ -173,7 +173,7 @@ func (s *BadgerStore) Expire(_ context.Context, key string, ttlSeconds int64) (b
 	return found, err
 }
 
-func (s *BadgerStore) TTL(_ context.Context, key string) (int64, error) {
+func (s *BadgerStore) TTL(key string) (int64, error) {
 	var ttlSecs int64
 	err := s.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
@@ -205,7 +205,7 @@ func (s *BadgerStore) TTL(_ context.Context, key string) (int64, error) {
 	return ttlSecs, err
 }
 
-func (s *BadgerStore) Persist(_ context.Context, key string) (bool, error) {
+func (s *BadgerStore) Persist(key string) (bool, error) {
 	var found bool
 	err := s.db.Update(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
@@ -223,7 +223,7 @@ func (s *BadgerStore) Persist(_ context.Context, key string) (bool, error) {
 	return found, err
 }
 
-func (s *BadgerStore) Info(_ context.Context) (Info, error) {
+func (s *BadgerStore) Info() (Info, error) {
 	lsm, vlog := s.db.Size()
 	return Info{
 		UsedBytes:      lsm + vlog,
