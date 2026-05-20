@@ -54,8 +54,7 @@ func NewBadgerStore(cfg *config.Config) (*BadgerStore, error) {
 		return nil, fmt.Errorf("init eviction index: %w", err)
 	}
 
-	s.wg.Add(1)
-	go s.maintenanceLoop(ctx)
+	s.wg.Go(func() { s.maintenanceLoop(ctx) })
 
 	return s, nil
 }

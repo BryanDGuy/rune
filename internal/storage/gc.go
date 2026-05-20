@@ -38,8 +38,6 @@ func (s *BadgerStore) runGC(ctx context.Context) {
 //     checks storage utilization and triggers GC when above the eviction
 //     threshold.
 func (s *BadgerStore) maintenanceLoop(ctx context.Context) {
-	defer s.wg.Done()
-
 	heartbeat := time.NewTicker(s.cfg.GCInterval)
 	defer heartbeat.Stop()
 
