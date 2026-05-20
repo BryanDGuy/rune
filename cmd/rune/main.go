@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -14,19 +13,7 @@ import (
 )
 
 func main() {
-	var configPath string
-	flag.StringVar(&configPath, "config", "", "path to config file (default: rune.yaml if it exists)")
-	flag.StringVar(&configPath, "c", "", "path to config file (shorthand)")
-	flag.Parse()
-
-	// If --config not set and rune.yaml exists in working directory, use it.
-	if configPath == "" {
-		if _, err := os.Stat("rune.yaml"); err == nil {
-			configPath = "rune.yaml"
-		}
-	}
-
-	cfg, err := config.LoadConfig(configPath)
+	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
