@@ -1,4 +1,3 @@
-
 package server
 
 import (
@@ -95,7 +94,10 @@ func (h *handler) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, runev
 			return err
 		}
 	}
-	pw.Close()
+	if err := pw.Close(); err != nil {
+		<-setErr
+		return status.Errorf(codes.Internal, "close pipe writer: %v", err)
+	}
 
 	if err := <-setErr; err != nil {
 		return status.Errorf(codes.Internal, "set: %v", err)

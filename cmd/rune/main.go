@@ -1,7 +1,7 @@
-
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
@@ -37,7 +37,7 @@ func main() {
 	}
 
 	srv := server.New(cfg, store)
-	if err := srv.Start(); err != nil {
+	if err := srv.Start(context.Background()); err != nil {
 		log.Fatalf("start server: %v", err)
 	}
 	log.Printf("Rune listening on :%d", cfg.Port)

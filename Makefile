@@ -28,10 +28,10 @@ update-deps:
 	go mod tidy
 
 modernize:
-	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest ./...
+	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest $(shell go list ./... | grep -v /gen/)
 
 modernize-fix:
-	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix ./...
+	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix $(shell go list ./... | grep -v /gen/)
 
 proto:
 	protoc \

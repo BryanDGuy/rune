@@ -1,4 +1,3 @@
-
 package storage
 
 import (
@@ -31,7 +30,7 @@ func newTestStore(t *testing.T) *BadgerStore {
 	t.Helper()
 	s, err := NewBadgerStore(baseStorageTestConfig(t))
 	require.NoError(t, err)
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { require.NoError(t, s.Close()) })
 	return s
 }
 

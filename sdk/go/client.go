@@ -1,4 +1,3 @@
-
 package runesdk
 
 import (
@@ -79,7 +78,7 @@ func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts ...SetOp
 				return err
 			}
 		}
-		if readErr == io.EOF || readErr == io.ErrUnexpectedEOF {
+		if errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF) {
 			break
 		}
 		if readErr != nil {
@@ -109,7 +108,7 @@ func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	resp, err := stream.Recv()
 	if err != nil {
 		cancel()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return io.NopCloser(io.Reader(emptyReader{})), nil
 		}
 		if status.Code(err) == codes.NotFound {
@@ -139,7 +138,7 @@ type streamReader struct {
 func (r *streamReader) Read(p []byte) (int, error) {
 	for len(r.buf) == 0 {
 		resp, err := r.stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return 0, io.EOF
 		}
 		if err != nil {

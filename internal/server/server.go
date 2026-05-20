@@ -1,4 +1,3 @@
-
 package server
 
 import (
@@ -31,8 +30,8 @@ func New(cfg *config.Config, store storage.Storage) *Server {
 	return s
 }
 
-func (s *Server) Start() error {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.cfg.Port))
+func (s *Server) Start(ctx context.Context) error {
+	lis, err := (&net.ListenConfig{}).Listen(ctx, "tcp", fmt.Sprintf(":%d", s.cfg.Port))
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
@@ -65,6 +64,7 @@ func (t *connTracker) HandleRPC(_ context.Context, _ stats.RPCStats) {}
 func (t *connTracker) TagConn(ctx context.Context, _ *stats.ConnTagInfo) context.Context {
 	return ctx
 }
+
 func (t *connTracker) HandleConn(_ context.Context, cs stats.ConnStats) {
 	switch cs.(type) {
 	case *stats.ConnBegin:

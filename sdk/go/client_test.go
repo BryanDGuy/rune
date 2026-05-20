@@ -1,4 +1,3 @@
-
 package runesdk_test
 
 import (
@@ -89,6 +88,6 @@ func TestSDKLargePayload(t *testing.T) {
 
 	got, err := io.ReadAll(rc)
 	require.NoError(t, err)
-	require.Equal(t, size, len(got), "length mismatch")
+	require.Len(t, got, size, "length mismatch")
 	assert.Equal(t, payload, got, "content mismatch")
 }

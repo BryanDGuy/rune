@@ -1,4 +1,3 @@
-
 package runesdk
 
 import "time"

@@ -1,9 +1,9 @@
-
 package server_test
 
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"testing"
 
@@ -96,7 +96,7 @@ func TestSetGet(t *testing.T) {
 	var got []byte
 	for {
 		resp, err := getStream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)
@@ -219,7 +219,7 @@ func TestInfo(t *testing.T) {
 	require.NoError(t, err)
 	for {
 		_, err := stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)
@@ -234,7 +234,7 @@ func TestInfo(t *testing.T) {
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, info.CacheHits, int64(1))
 	assert.GreaterOrEqual(t, info.CacheMisses, int64(1))
-	assert.Greater(t, info.StorageMaxBytes, int64(0))
+	assert.Positive(t, info.StorageMaxBytes)
 	assert.GreaterOrEqual(t, info.ActiveConnections, int64(0))
 }
 
@@ -267,12 +267,12 @@ func TestLargePayload(t *testing.T) {
 	var got []byte
 	for {
 		resp, err := getStream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)
 		got = append(got, resp.Chunk...)
 	}
-	require.Equal(t, size, len(got))
+	require.Len(t, got, size)
 	assert.Equal(t, payload, got)
 }

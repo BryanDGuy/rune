@@ -1,4 +1,3 @@
-
 package storage
 
 import (
@@ -118,10 +117,10 @@ func TestEvictionTriggersUnderPressure(t *testing.T) {
 
 	// cold-large has the highest score and should be gone.
 	_, errCold := s.Get(ctx, "cold-large")
-	assert.ErrorIs(t, errCold, ErrNotFound, "cold-large should have been evicted")
+	require.ErrorIs(t, errCold, ErrNotFound, "cold-large should have been evicted")
 
 	// At least one key was evicted.
-	assert.Greater(t, s.evictionsTotal.Load(), int64(0), "evictionsTotal should be > 0")
+	assert.Positive(t, s.evictionsTotal.Load(), "evictionsTotal should be > 0")
 }
 
 // TestEvictionCounterIncrements verifies that evictionsTotal is incremented

@@ -1,4 +1,3 @@
-
 package storage
 
 import (
@@ -10,7 +9,7 @@ import (
 // ErrNotFound is returned by Get and TTL when the key does not exist.
 var ErrNotFound = errors.New("key not found")
 
-type StorageInfo struct {
+type Info struct {
 	UsedBytes         int64
 	MaxBytes          int64
 	Hits              int64
@@ -28,6 +27,6 @@ type Storage interface {
 	// TTL returns remaining seconds. -1 = no TTL. -2 = not found.
 	TTL(ctx context.Context, key string) (int64, error)
 	Persist(ctx context.Context, key string) (bool, error)
-	Info(ctx context.Context) (StorageInfo, error)
+	Info(ctx context.Context) (Info, error)
 	Close() error
 }

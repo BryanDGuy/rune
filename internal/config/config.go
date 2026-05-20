@@ -1,9 +1,10 @@
-
 package config
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -29,10 +30,10 @@ type Config struct {
 
 func defaults() *Config {
 	return &Config{
-		Port:              7946,
-		DataDir:           "/var/rune/data",
-		MaxStorage:        "100GB",
-		EvictionThreshold: 0.8,
+		Port:               7946,
+		DataDir:            "/var/rune/data",
+		MaxStorage:         "100GB",
+		EvictionThreshold:  0.8,
 		EvictionSizeWeight: 1.0,
 		EvictionAgeWeight:  1.0,
 		StreamChunkSize:    1024 * 1024, // 1MB
@@ -48,7 +49,11 @@ func LoadConfig(path string) (*Config, error) {
 	cfg := defaults()
 
 	if path != "" {
-		data, err := os.ReadFile(path)
+		absPath, err := filepath.Abs(filepath.Clean(path))
+		if err != nil {
+			return nil, fmt.Errorf("resolve config path: %w", err)
+		}
+		data, err := fs.ReadFile(os.DirFS(filepath.Dir(absPath)), filepath.Base(absPath))
 		if err != nil {
 			return nil, fmt.Errorf("read config: %w", err)
 		}

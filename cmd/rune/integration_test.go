@@ -1,4 +1,3 @@
-
 package main_test
 
 import (
@@ -39,7 +38,7 @@ func TestIntegration20MB(t *testing.T) {
 	require.NoError(t, r.Close())
 	require.NoError(t, err)
 
-	require.Equal(t, size, len(got), "retrieved size mismatch")
+	require.Len(t, got, size, "retrieved size mismatch")
 	assert.True(t, bytes.Equal(payload, got), "payload content mismatch")
 }
 

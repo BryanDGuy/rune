@@ -1,4 +1,3 @@
-
 package storage
 
 import (
@@ -65,7 +64,7 @@ func TestGCConcurrentCallsSkipped(t *testing.T) {
 }
 
 // TestGCLoopStopsOnCancel verifies that the maintenanceLoop goroutine exits
-// when the store is closed (context cancelled). If Close() returns within the
+// when the store is closed (context canceled). If Close() returns within the
 // timeout the loop has exited cleanly.
 func TestGCLoopStopsOnCancel(t *testing.T) {
 	s, err := NewBadgerStore(baseStorageTestConfig(t))
