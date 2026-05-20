@@ -1,9 +1,9 @@
-.PHONY: build test lint fmt vet tidy update-deps modernize modernize-fix
+.PHONY: build test lint fmt vet tidy update-deps modernize modernize-fix proto
 
 BINARY := bin/rune
 
 build:
-	go build -o $(BINARY) .
+	go build -o $(BINARY) ./cmd/rune
 
 test:
 	go test -race ./...
@@ -29,3 +29,12 @@ modernize:
 
 modernize-fix:
 	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix ./...
+
+proto:
+	protoc \
+		--go_out=gen \
+		--go_opt=paths=source_relative \
+		--go-grpc_out=gen \
+		--go-grpc_opt=paths=source_relative \
+		--proto_path=proto \
+		rune/v1/rune.proto
