@@ -20,9 +20,9 @@ func newTestStore(t *testing.T) *BadgerStore {
 		EvictionThreshold:  0.8,
 		EvictionSizeWeight: 1.0,
 		EvictionAgeWeight:  1.0,
-		GCInterval:         time.Hour,
+		GCInterval:         time.Hour,       // prevent GC from running during tests
 		GCDiscardRatio:     0.5,
-		TTLSweepInterval:   time.Hour,
+		TTLSweepInterval:   time.Hour,       // prevent sweep from running during tests
 	}
 	s, err := NewBadgerStore(cfg)
 	require.NoError(t, err)

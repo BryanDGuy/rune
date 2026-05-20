@@ -51,7 +51,8 @@ func TestYAMLFile(t *testing.T) {
 	require.NoError(t, err)
 	defer os.Remove(f.Name())
 
-	f.WriteString("port: 8888\nlog-level: debug\n")
+	_, err = f.WriteString("port: 8888\nlog-level: debug\n")
+	require.NoError(t, err)
 	f.Close()
 
 	cfg, err := LoadConfig(f.Name())

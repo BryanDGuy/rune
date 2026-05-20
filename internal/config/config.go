@@ -83,21 +83,29 @@ func LoadConfig(path string) (*Config, error) {
 
 func parseBytes(s string) (int64, error) {
 	s = strings.TrimSpace(s)
-	multipliers := map[string]int64{
-		"KB": 1024,
-		"MB": 1024 * 1024,
-		"GB": 1024 * 1024 * 1024,
-		"TB": 1024 * 1024 * 1024 * 1024,
+	suffixes := []struct {
+		suffix string
+		mult   int64
+	}{
+		{"TB", 1024 * 1024 * 1024 * 1024},
+		{"GB", 1024 * 1024 * 1024},
+		{"MB", 1024 * 1024},
+		{"KB", 1024},
+		{"B", 1},
 	}
 	upper := strings.ToUpper(s)
-	for suffix, mult := range multipliers {
-		if strings.HasSuffix(upper, suffix) {
-			n, err := strconv.ParseInt(strings.TrimSuffix(upper, suffix), 10, 64)
+	for _, entry := range suffixes {
+		if strings.HasSuffix(upper, entry.suffix) {
+			n, err := strconv.ParseInt(strings.TrimSuffix(upper, entry.suffix), 10, 64)
 			if err != nil {
 				return 0, fmt.Errorf("invalid size %q", s)
 			}
-			return n * mult, nil
+			return n * entry.mult, nil
 		}
 	}
-	return strconv.ParseInt(s, 10, 64)
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid size format %q", s)
+	}
+	return n, nil
 }

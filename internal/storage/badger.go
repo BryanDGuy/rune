@@ -106,7 +106,9 @@ func (s *BadgerStore) Set(_ context.Context, key string, r io.Reader, ttlSeconds
 func (s *BadgerStore) Delete(_ context.Context, keys ...string) (int64, error) {
 	var deleted int64
 	for _, key := range keys {
+		var didExist bool
 		err := s.db.Update(func(txn *badger.Txn) error {
+			didExist = false
 			_, err := txn.Get([]byte(key))
 			if errors.Is(err, badger.ErrKeyNotFound) {
 				return nil
@@ -114,11 +116,14 @@ func (s *BadgerStore) Delete(_ context.Context, keys ...string) (int64, error) {
 			if err != nil {
 				return err
 			}
-			deleted++
+			didExist = true
 			return txn.Delete([]byte(key))
 		})
 		if err != nil {
 			return deleted, err
+		}
+		if didExist {
+			deleted++
 		}
 		s.eviction.remove(key)
 	}
@@ -142,6 +147,9 @@ func (s *BadgerStore) Exists(_ context.Context, keys ...string) (int64, error) {
 }
 
 func (s *BadgerStore) Expire(_ context.Context, key string, ttlSeconds int64) (bool, error) {
+	if ttlSeconds <= 0 {
+		return false, fmt.Errorf("ttlSeconds must be positive, got %d", ttlSeconds)
+	}
 	var found bool
 	err := s.db.Update(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
@@ -178,8 +186,10 @@ func (s *BadgerStore) TTL(_ context.Context, key string) (int64, error) {
 			return nil
 		}
 		remaining := time.Until(time.Unix(int64(expiresAt), 0))
-		if remaining < 0 {
-			remaining = 0
+		if remaining <= 0 {
+			// Key has expired but BadgerDB hasn't reaped it yet — treat as not found.
+			ttlSecs = -2
+			return nil
 		}
 		ttlSecs = int64(remaining.Seconds())
 		return nil
@@ -218,14 +228,17 @@ func (s *BadgerStore) Info(_ context.Context) (StorageInfo, error) {
 
 func (s *BadgerStore) initEvictionIndex() error {
 	return s.db.View(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false
-		it := txn.NewIterator(opts)
+		it := txn.NewIterator(badger.DefaultIteratorOptions)
 		defer it.Close()
 		for it.Rewind(); it.Valid(); it.Next() {
 			item := it.Item()
 			key := string(item.KeyCopy(nil))
-			s.eviction.recordSet(key, item.EstimatedSize())
+			if err := item.Value(func(val []byte) error {
+				s.eviction.recordSet(key, int64(len(val)))
+				return nil
+			}); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
