@@ -1,0 +1,70 @@
+version: "2"
+run:
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    # Correctness
+    - bodyclose
+    - containedctx
+    - contextcheck
+    - durationcheck
+    - exhaustive
+    - gocheckcompilerdirectives
+    - makezero
+    - nilnesserr
+    - noctx
+    - reassign
+    - recvcheck
+    - unparam
+    - wastedassign
+    # Error handling
+    - errorlint
+    # Security
+    - asciicheck
+    - bidichk
+    - gosec
+    # Performance
+    - perfsprint
+    - prealloc
+    # Idiomatic
+    - gocritic
+    - intrange
+    - mirror
+    - misspell
+    - nakedret
+    - nolintlint
+    - predeclared
+    - revive
+    - unconvert
+    - usestdlibvars
+    # Test quality
+    - testableexamples
+    - testifylint
+    - thelper
+    - usetesting
+  settings:
+    govet:
+      enable-all: true
+    misspell:
+      locale: US
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - std-error-handling
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    gofumpt:
+      extra-rules: true
+  exclusions:
+    generated: lax
