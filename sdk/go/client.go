@@ -115,7 +115,7 @@ func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	if err != nil {
 		cancel()
 		if errors.Is(err, io.EOF) {
-			return io.NopCloser(io.Reader(emptyReader{})), nil
+			return io.NopCloser(emptyReader{}), nil
 		}
 		if status.Code(err) == codes.NotFound {
 			return nil, ErrNotFound
