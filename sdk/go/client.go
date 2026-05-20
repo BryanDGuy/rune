@@ -18,6 +18,11 @@ const chunkSize = 1 << 20 // 1MB
 // ErrNotFound is returned by Get when the key does not exist.
 var ErrNotFound = errors.New("key not found")
 
+// SetOptions configures a Set call. Pass nil for defaults.
+type SetOptions struct {
+	TTL time.Duration
+}
+
 // Client is a Rune cache client.
 type Client struct {
 	conn *grpc.ClientConn
