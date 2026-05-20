@@ -30,7 +30,7 @@ func TestIntegration20MB(t *testing.T) {
 	const size = 20 << 20 // 20MB
 	payload := bytes.Repeat([]byte("rune"), size/4)
 
-	require.NoError(t, client.Set(ctx, "big-key", bytes.NewReader(payload)))
+	require.NoError(t, client.Set(ctx, "big-key", bytes.NewReader(payload), nil))
 
 	r, err := client.Get(ctx, "big-key")
 	require.NoError(t, err)
@@ -55,7 +55,7 @@ func TestIntegrationWithTTL(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	require.NoError(t, client.Set(ctx, "ttl-key", bytes.NewReader([]byte("value")), runesdk.WithTTL(60*time.Second)))
+	require.NoError(t, client.Set(ctx, "ttl-key", bytes.NewReader([]byte("value")), &runesdk.SetOptions{TTL: 60 * time.Second}))
 
 	r, err := client.Get(ctx, "ttl-key")
 	require.NoError(t, err)

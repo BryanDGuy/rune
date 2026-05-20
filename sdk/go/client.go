@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"time"
 
 	runev1 "github.com/bryandguy/rune/gen/rune/v1"
 	"google.golang.org/grpc"
@@ -44,10 +45,10 @@ func NewFromConn(conn *grpc.ClientConn) *Client {
 
 // Set writes the value from r to the cache at key.
 // The value is chunked and sent via client-streaming gRPC in 1MB pieces.
-func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts ...SetOption) error {
-	o := &setOptions{}
-	for _, opt := range opts {
-		opt(o)
+func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts *SetOptions) error {
+	var ttl time.Duration
+	if opts != nil {
+		ttl = opts.TTL
 	}
 
 	stream, err := c.grpc.Set(ctx)
@@ -60,7 +61,7 @@ func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts ...SetOp
 		Payload: &runev1.SetRequest_Header{
 			Header: &runev1.SetHeader{
 				Key:        key,
-				TtlSeconds: int64(o.ttl.Seconds()),
+				TtlSeconds: int64(ttl.Seconds()),
 			},
 		},
 	}); err != nil {
