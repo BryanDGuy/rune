@@ -34,24 +34,29 @@ go build -o rune ./cmd/rune
 # Run with defaults (port 7946, data in /var/rune/data)
 ./rune
 
-# Run with a config file
-./rune --config rune.yaml
+# Override settings via environment variables
+RUNE_PORT=8080 RUNE_DATA_DIR=/tmp/rune ./rune
 ```
 
 ## Go SDK
 
 ```go
-import runesdk "github.com/bryandguy/rune/sdk/go"
+import (
+    runesdk "github.com/bryandguy/rune/sdk/go"
+    "google.golang.org/grpc"
+    "google.golang.org/grpc/credentials/insecure"
+)
 
-client, err := runesdk.New("localhost:7946")
+conn, err := grpc.NewClient("localhost:7946", grpc.WithTransportCredentials(insecure.NewCredentials()))
 if err != nil { ... }
+client := runesdk.NewClient(conn)
 defer client.Close()
 
 // Store a value (any io.Reader, any size)
-err = client.Set(ctx, "menu:123", file)
+err = client.Set(ctx, "menu:123", file, nil)
 
 // Store with TTL
-err = client.Set(ctx, "session:abc", reader, runesdk.WithTTL(10*time.Minute))
+err = client.Set(ctx, "session:abc", reader, &runesdk.SetOptions{TTL: 10 * time.Minute})
 
 // Retrieve — returns an io.ReadCloser, streams from server
 r, err := client.Get(ctx, "menu:123")
@@ -64,39 +69,22 @@ io.Copy(dest, r) // stream to destination without buffering the full value
 
 ## Configuration
 
-Config is loaded from a YAML file (`--config`) with environment variable overrides. All fields have sensible defaults.
+All configuration is via environment variables. All settings have sensible defaults.
 
-```yaml
-port: 7946
-data-dir: /var/rune/data
-max-storage: 100GB
-
-# Eviction: weighted score = (size_gb * size_weight) * (hours_since_access * age_weight)
-# Triggers when storage exceeds eviction-threshold (default 80%)
-eviction-threshold: 0.8
-eviction-size-weight: 1.0
-eviction-age-weight: 1.0
-
-# Streaming
-stream-chunk-size: 1MB
-
-# BadgerDB value log GC
-gc-interval: 10m
-gc-discard-ratio: 0.5
-
-# TTL background sweep
-ttl-sweep-interval: 60s
-
-# Observability
-log-level: info
-metrics-port: 9090
-```
-
-| Env var          | Config key   |
-|------------------|--------------|
-| `RUNE_PORT`      | `port`       |
-| `RUNE_DATA_DIR`  | `data-dir`   |
-| `RUNE_LOG_LEVEL` | `log-level`  |
+| Env var                      | Default          | Description                          |
+|------------------------------|------------------|--------------------------------------|
+| `RUNE_PORT`                  | `7946`           | gRPC listen port                     |
+| `RUNE_METRICS_PORT`          | `9090`           | Prometheus metrics port              |
+| `RUNE_DATA_DIR`              | `/var/rune/data` | BadgerDB data directory              |
+| `RUNE_LOG_LEVEL`             | `info`           | Log level                            |
+| `RUNE_MAX_STORAGE`           | `100GB`          | Storage limit (KB/MB/GB/TB)          |
+| `RUNE_EVICTION_THRESHOLD`    | `0.8`            | Fraction of max storage before eviction triggers |
+| `RUNE_EVICTION_SIZE_WEIGHT`  | `1.0`            | Weight of value size in eviction score |
+| `RUNE_EVICTION_AGE_WEIGHT`   | `1.0`            | Weight of time since last access in eviction score |
+| `RUNE_STREAM_CHUNK_SIZE`     | `1048576`        | gRPC stream chunk size in bytes      |
+| `RUNE_GC_INTERVAL`           | `10m`            | BadgerDB value log GC interval       |
+| `RUNE_GC_DISCARD_RATIO`      | `0.5`            | GC discard ratio (0–1)               |
+| `RUNE_TTL_SWEEP_INTERVAL`    | `60s`            | TTL expiry sweep interval            |
 
 ## Health checks
 
