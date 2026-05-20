@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: test -z "$(gofmt -l .)"
+      - run: make fmt-check
 
   vet:
     runs-on: ubuntu-latest
@@ -22,7 +22,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: go vet ./...
+      - run: make vet
 
   modernize:
     runs-on: ubuntu-latest
@@ -31,7 +31,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - run: go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest ./...
+      - run: make modernize
 
   lint:
     runs-on: ubuntu-latest
@@ -50,5 +50,4 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: test
-        run: go test -race ./...
+      - run: make test

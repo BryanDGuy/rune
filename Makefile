@@ -1,4 +1,4 @@
-.PHONY: build test lint fmt vet tidy update-deps modernize modernize-fix proto
+.PHONY: build test lint fmt fmt-check vet tidy update-deps modernize modernize-fix proto
 
 BINARY := bin/rune
 
@@ -13,6 +13,9 @@ lint:
 
 fmt:
 	gofmt -l -w .
+
+fmt-check:
+	test -z "$$(gofmt -l .)"
 
 vet:
 	go vet ./...
