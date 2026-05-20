@@ -1,0 +1,104 @@
+package storage
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/runicsigil/rune/internal/config"
+	"github.com/stretchr/testify/require"
+)
+
+// newGCTestStore creates a store with very short GC / sweep intervals so the
+// tests don't sit idle waiting for tickers.
+func newGCTestStore(t *testing.T) *BadgerStore {
+	t.Helper()
+	cfg := &config.Config{
+		DataDir:            t.TempDir(),
+		MaxStorageBytes:    1024 * 1024 * 1024,
+		EvictionThreshold:  0.8,
+		EvictionSizeWeight: 1.0,
+		EvictionAgeWeight:  1.0,
+		GCInterval:         100 * time.Millisecond,
+		GCDiscardRatio:     0.5,
+		TTLSweepInterval:   time.Hour,
+	}
+	s, err := NewBadgerStore(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+	return s
+}
+
+// TestGCRunsOnEmptyDB verifies that runGC on a brand-new (empty) database
+// returns without error. BadgerDB returns ErrNoRewrite for an empty vlog,
+// which our implementation treats as a successful no-op.
+func TestGCRunsOnEmptyDB(t *testing.T) {
+	s := newGCTestStore(t)
+	// Should return immediately without panicking or returning an error.
+	// runGC has no return value; absence of panic/hang is the assertion.
+	done := make(chan struct{})
+	go func() {
+		s.runGC(context.Background())
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// success
+	case <-time.After(5 * time.Second):
+		t.Fatal("runGC on empty DB did not return within timeout")
+	}
+}
+
+// TestGCConcurrentCallsSkipped verifies that when gcRunning is already set,
+// a second call to runGC returns immediately without blocking or panicking.
+func TestGCConcurrentCallsSkipped(t *testing.T) {
+	s := newGCTestStore(t)
+
+	// Simulate a GC pass already in progress.
+	s.gcRunning.Store(true)
+	defer s.gcRunning.Store(false)
+
+	done := make(chan struct{})
+	go func() {
+		s.runGC(context.Background())
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// The call was correctly skipped — returned immediately.
+	case <-time.After(time.Second):
+		t.Fatal("runGC did not skip immediately when gcRunning was true")
+	}
+}
+
+// TestGCLoopStopsOnCancel verifies that the maintenanceLoop goroutine exits
+// when the store is closed (context cancelled). If Close() returns within the
+// timeout the loop has exited cleanly.
+func TestGCLoopStopsOnCancel(t *testing.T) {
+	cfg := &config.Config{
+		DataDir:            t.TempDir(),
+		MaxStorageBytes:    1024 * 1024 * 1024,
+		EvictionThreshold:  0.8,
+		EvictionSizeWeight: 1.0,
+		EvictionAgeWeight:  1.0,
+		GCInterval:         time.Hour, // heartbeat won't fire during this test
+		GCDiscardRatio:     0.5,
+		TTLSweepInterval:   time.Hour,
+	}
+	s, err := NewBadgerStore(cfg)
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.Close()
+	}()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close() did not return within timeout — maintenanceLoop may be stuck")
+	}
+}
