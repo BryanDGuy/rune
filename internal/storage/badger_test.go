@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"bytes"
 	"io"
 	"testing"
 	"time"
@@ -42,7 +41,7 @@ func TestBadgerGetNotFound(t *testing.T) {
 func TestBadgerSetGet(t *testing.T) {
 	s := newTestStore(t)
 	data := []byte("hello rune")
-	require.NoError(t, s.Set("k1", bytes.NewReader(data), 0))
+	require.NoError(t, s.Set("k1", data, 0))
 
 	r, err := s.Get("k1")
 	require.NoError(t, err)
@@ -54,8 +53,8 @@ func TestBadgerSetGet(t *testing.T) {
 
 func TestBadgerDelete(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Set("k1", bytes.NewReader([]byte("v")), 0))
-	require.NoError(t, s.Set("k2", bytes.NewReader([]byte("v")), 0))
+	require.NoError(t, s.Set("k1", []byte("v"), 0))
+	require.NoError(t, s.Set("k2", []byte("v"), 0))
 
 	n, err := s.Delete("k1", "k2", "missing")
 	require.NoError(t, err)
@@ -67,7 +66,7 @@ func TestBadgerDelete(t *testing.T) {
 
 func TestBadgerExists(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Set("k1", bytes.NewReader([]byte("v")), 0))
+	require.NoError(t, s.Set("k1", []byte("v"), 0))
 
 	n, err := s.Exists("k1", "missing")
 	require.NoError(t, err)
@@ -81,12 +80,12 @@ func TestBadgerTTL(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(-2), ttl)
 
-	require.NoError(t, s.Set("k1", bytes.NewReader([]byte("v")), 0))
+	require.NoError(t, s.Set("k1", []byte("v"), 0))
 	ttl, err = s.TTL("k1")
 	require.NoError(t, err)
 	assert.Equal(t, int64(-1), ttl)
 
-	require.NoError(t, s.Set("k2", bytes.NewReader([]byte("v")), 60))
+	require.NoError(t, s.Set("k2", []byte("v"), 60))
 	ttl, err = s.TTL("k2")
 	require.NoError(t, err)
 	assert.InDelta(t, int64(60), ttl, 2)
@@ -94,7 +93,7 @@ func TestBadgerTTL(t *testing.T) {
 
 func TestBadgerExpire(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Set("k1", bytes.NewReader([]byte("v")), 0))
+	require.NoError(t, s.Set("k1", []byte("v"), 0))
 
 	ok, err := s.Expire("k1", 120)
 	require.NoError(t, err)
@@ -111,7 +110,7 @@ func TestBadgerExpire(t *testing.T) {
 
 func TestBadgerPersist(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Set("k1", bytes.NewReader([]byte("v")), 60))
+	require.NoError(t, s.Set("k1", []byte("v"), 60))
 
 	ok, err := s.Persist("k1")
 	require.NoError(t, err)
@@ -124,7 +123,7 @@ func TestBadgerPersist(t *testing.T) {
 
 func TestBadgerInfo(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Set("k1", bytes.NewReader([]byte("value")), 0))
+	require.NoError(t, s.Set("k1", []byte("value"), 0))
 	_, _ = s.Get("k1")
 	_, _ = s.Get("missing")
 

@@ -55,7 +55,6 @@ func NewBadgerStore(cfg *config.Config) (*BadgerStore, error) {
 	}
 
 	s.wg.Go(func() { s.maintenanceLoop(ctx) })
-
 	return s, nil
 }
 
@@ -90,12 +89,8 @@ func (s *BadgerStore) Get(key string) (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(buf)), nil
 }
 
-func (s *BadgerStore) Set(key string, r io.Reader, ttlSeconds int64) error {
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return fmt.Errorf("read value: %w", err)
-	}
-	entry := badger.NewEntry([]byte(key), data)
+func (s *BadgerStore) Set(key string, value []byte, ttlSeconds int64) error {
+	entry := badger.NewEntry([]byte(key), value)
 	if ttlSeconds > 0 {
 		entry = entry.WithTTL(time.Duration(ttlSeconds) * time.Second)
 	}
@@ -104,7 +99,7 @@ func (s *BadgerStore) Set(key string, r io.Reader, ttlSeconds int64) error {
 	}); err != nil {
 		return err
 	}
-	s.eviction.recordSet(key, int64(len(data)))
+	s.eviction.recordSet(key, int64(len(value)))
 	return nil
 }
 

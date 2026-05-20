@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -88,9 +87,9 @@ func TestEvictionTriggersUnderPressure(t *testing.T) {
 	ctx := context.Background()
 
 	// Write three keys so they exist in BadgerDB.
-	require.NoError(t, s.Set("hot-small", bytes.NewReader(make([]byte, 100)), 0))
-	require.NoError(t, s.Set("hot-large", bytes.NewReader(make([]byte, 100)), 0))
-	require.NoError(t, s.Set("cold-large", bytes.NewReader(make([]byte, 100)), 0))
+	require.NoError(t, s.Set("hot-small", make([]byte, 100), 0))
+	require.NoError(t, s.Set("hot-large", make([]byte, 100), 0))
+	require.NoError(t, s.Set("cold-large", make([]byte, 100), 0))
 
 	// Overwrite eviction index entries with controlled sizes and access times
 	// to produce predictable scores regardless of when the test runs.
@@ -132,8 +131,8 @@ func TestEvictionCounterIncrements(t *testing.T) {
 	ctx := context.Background()
 
 	// Write two keys.
-	require.NoError(t, s.Set("key-a", bytes.NewReader(make([]byte, 50)), 0))
-	require.NoError(t, s.Set("key-b", bytes.NewReader(make([]byte, 50)), 0))
+	require.NoError(t, s.Set("key-a", make([]byte, 50), 0))
+	require.NoError(t, s.Set("key-b", make([]byte, 50), 0))
 
 	// Assign large sizes + old access so both get evicted.
 	now := time.Now()
@@ -169,7 +168,7 @@ func TestEvictionNoOpBelowThreshold(t *testing.T) {
 	s := newTestStore(t) // uses 1 GB max, 0.8 threshold → 800 MB trigger
 
 	ctx := context.Background()
-	require.NoError(t, s.Set("key1", bytes.NewReader(make([]byte, 100)), 0))
+	require.NoError(t, s.Set("key1", make([]byte, 100), 0))
 
 	err := checkEviction(ctx, s)
 	require.NoError(t, err)

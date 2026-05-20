@@ -62,44 +62,23 @@ func (h *handler) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, runev
 	key := hdr.Key
 	ttl := hdr.TtlSeconds
 
-	pr, pw := io.Pipe()
-	defer pr.Close()
-
-	// Run store.Set in a goroutine reading from the pipe.
-	setErr := make(chan error, 1)
-	go func() {
-		setErr <- h.srv.store.Set(key, pr, ttl)
-	}()
-
-	// Forward subsequent chunk messages to the pipe writer.
+	var value []byte
 	for {
 		msg, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			pw.CloseWithError(err)
-			<-setErr
 			return err
 		}
 		chunk, ok := msg.Payload.(*runev1.SetRequest_Chunk)
 		if !ok || chunk == nil {
-			pw.CloseWithError(status.Error(codes.InvalidArgument, "expected chunk payload"))
-			<-setErr
 			return status.Error(codes.InvalidArgument, "expected chunk payload after header")
 		}
-		if _, err := pw.Write(chunk.Chunk); err != nil {
-			pw.CloseWithError(err)
-			<-setErr
-			return err
-		}
-	}
-	if err := pw.Close(); err != nil {
-		<-setErr
-		return status.Errorf(codes.Internal, "close pipe writer: %v", err)
+		value = append(value, chunk.Chunk...)
 	}
 
-	if err := <-setErr; err != nil {
+	if err := h.srv.store.Set(key, value, ttl); err != nil {
 		return status.Errorf(codes.Internal, "set: %v", err)
 	}
 	return stream.SendAndClose(&runev1.SetResponse{})

@@ -50,7 +50,7 @@ The SDK is cluster-aware — it caches the hash ring locally and connects direct
 
 Accepts gRPC connections over HTTP/2. All value transfers use server-streaming RPCs so large blobs are chunked off disk and streamed to the client — no full in-memory buffering required.
 
-Values are read and sent in chunks of **1MB by default** (configurable via `stream-chunk-size`). This balances throughput and memory — each in-flight stream consumes at most one chunk worth of RAM on the server at a time. Below 64KB, gRPC framing overhead dominates. Above 4MB, memory pressure increases without meaningful throughput gains.
+The client streams values in chunks of **1MB by default** (configurable via `RUNE_STREAM_CHUNK_SIZE`). The server accumulates chunks and writes to BadgerDB in one operation. Below 64KB, gRPC framing overhead dominates. Above 4MB, memory pressure increases without meaningful throughput gains on reads.
 
 **Proto surface (equivalents to Redis commands):**
 

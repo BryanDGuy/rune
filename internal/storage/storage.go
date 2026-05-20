@@ -19,7 +19,7 @@ type Info struct {
 
 type Storage interface {
 	Get(key string) (io.ReadCloser, error)
-	Set(key string, r io.Reader, ttlSeconds int64) error
+	Set(key string, value []byte, ttlSeconds int64) error
 	Delete(keys ...string) (int64, error)
 	Exists(keys ...string) (int64, error)
 	Expire(key string, ttlSeconds int64) (bool, error)
