@@ -23,30 +23,23 @@ func (h *handler) Ping(_ context.Context, _ *runev1.PingRequest) (*runev1.PingRe
 }
 
 func (h *handler) Get(req *runev1.GetRequest, stream grpc.ServerStreamingServer[runev1.GetResponse]) error {
-	r, err := h.srv.store.Get(req.Key)
+	value, err := h.srv.store.Get(req.Key)
 	if errors.Is(err, storage.ErrNotFound) {
 		return status.Error(codes.NotFound, "key not found")
 	}
 	if err != nil {
 		return status.Errorf(codes.Internal, "get: %v", err)
 	}
-	defer r.Close()
 
-	buf := make([]byte, h.srv.cfg.StreamChunkSize)
-	for {
-		n, readErr := r.Read(buf)
-		if n > 0 {
-			if sendErr := stream.Send(&runev1.GetResponse{Chunk: buf[:n]}); sendErr != nil {
-				return sendErr
-			}
+	chunkSize := h.srv.cfg.StreamChunkSize
+	for len(value) > 0 {
+		n := min(chunkSize, len(value))
+		if err := stream.Send(&runev1.GetResponse{Chunk: value[:n]}); err != nil {
+			return err
 		}
-		if errors.Is(readErr, io.EOF) {
-			return nil
-		}
-		if readErr != nil {
-			return status.Errorf(codes.Internal, "read: %v", readErr)
-		}
+		value = value[n:]
 	}
+	return nil
 }
 
 func (h *handler) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, runev1.SetResponse]) error {

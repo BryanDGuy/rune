@@ -1,9 +1,6 @@
 package storage
 
-import (
-	"errors"
-	"io"
-)
+import "errors"
 
 // ErrNotFound is returned by Get and TTL when the key does not exist.
 var ErrNotFound = errors.New("key not found")
@@ -18,7 +15,7 @@ type Info struct {
 }
 
 type Storage interface {
-	Get(key string) (io.ReadCloser, error)
+	Get(key string) ([]byte, error)
 	Set(key string, value []byte, ttlSeconds int64) error
 	Delete(keys ...string) (int64, error)
 	Exists(keys ...string) (int64, error)

@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"io"
 	"testing"
 	"time"
 
@@ -43,10 +42,7 @@ func TestBadgerSetGet(t *testing.T) {
 	data := []byte("hello rune")
 	require.NoError(t, s.Set("k1", data, 0))
 
-	r, err := s.Get("k1")
-	require.NoError(t, err)
-	defer r.Close()
-	got, err := io.ReadAll(r)
+	got, err := s.Get("k1")
 	require.NoError(t, err)
 	assert.Equal(t, data, got)
 }

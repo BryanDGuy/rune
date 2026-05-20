@@ -1,11 +1,9 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -64,7 +62,7 @@ func (s *BadgerStore) Close() error {
 	return s.db.Close()
 }
 
-func (s *BadgerStore) Get(key string) (io.ReadCloser, error) {
+func (s *BadgerStore) Get(key string) ([]byte, error) {
 	var buf []byte
 	err := s.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
@@ -86,7 +84,7 @@ func (s *BadgerStore) Get(key string) (io.ReadCloser, error) {
 	}
 	s.hits.Add(1)
 	s.eviction.recordAccess(key)
-	return io.NopCloser(bytes.NewReader(buf)), nil
+	return buf, nil
 }
 
 func (s *BadgerStore) Set(key string, value []byte, ttlSeconds int64) error {
