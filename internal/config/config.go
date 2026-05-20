@@ -13,18 +13,18 @@ import (
 )
 
 type Config struct {
-	Port               int           `yaml:"port"`
+	LogLevel           string        `yaml:"log-level"`
 	DataDir            string        `yaml:"data-dir"`
 	MaxStorage         string        `yaml:"max-storage"`
-	MaxStorageBytes    int64         `yaml:"-"`
+	EvictionAgeWeight  float64       `yaml:"eviction-age-weight"`
 	EvictionThreshold  float64       `yaml:"eviction-threshold"`
 	EvictionSizeWeight float64       `yaml:"eviction-size-weight"`
-	EvictionAgeWeight  float64       `yaml:"eviction-age-weight"`
+	Port               int           `yaml:"port"`
 	StreamChunkSize    int           `yaml:"stream-chunk-size"`
 	GCInterval         time.Duration `yaml:"gc-interval"`
 	GCDiscardRatio     float64       `yaml:"gc-discard-ratio"`
 	TTLSweepInterval   time.Duration `yaml:"ttl-sweep-interval"`
-	LogLevel           string        `yaml:"log-level"`
+	MaxStorageBytes    int64         `yaml:"-"`
 	MetricsPort        int           `yaml:"metrics-port"`
 }
 

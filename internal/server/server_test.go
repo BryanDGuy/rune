@@ -218,7 +218,7 @@ func TestInfo(t *testing.T) {
 	stream, err := client.Get(ctx, &runev1.GetRequest{Key: "info-key"})
 	require.NoError(t, err)
 	for {
-		_, err := stream.Recv()
+		_, err = stream.Recv()
 		if errors.Is(err, io.EOF) {
 			break
 		}

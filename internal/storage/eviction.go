@@ -11,13 +11,13 @@ import (
 )
 
 type evictionEntry struct {
-	size         int64
 	lastAccessed time.Time
+	size         int64
 }
 
 type evictionIndex struct {
-	mu      sync.RWMutex
 	entries map[string]*evictionEntry
+	mu      sync.RWMutex
 }
 
 func newEvictionIndex() *evictionIndex {

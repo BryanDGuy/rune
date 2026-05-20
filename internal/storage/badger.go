@@ -19,12 +19,12 @@ type BadgerStore struct {
 	db             *badger.DB
 	cfg            *config.Config
 	eviction       *evictionIndex
+	cancel         context.CancelFunc
+	wg             sync.WaitGroup
 	hits           atomic.Int64
 	misses         atomic.Int64
 	evictionsTotal atomic.Int64
 	gcRunning      atomic.Bool
-	cancel         context.CancelFunc
-	wg             sync.WaitGroup
 }
 
 func NewBadgerStore(cfg *config.Config) (*BadgerStore, error) {
