@@ -1,9 +1,10 @@
 package storage
 
 import (
+	"cmp"
 	"context"
 	"errors"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -44,8 +45,7 @@ func (e *evictionIndex) remove(key string) {
 	delete(e.entries, key)
 }
 
-// weightedScore computes the eviction priority score for an entry at time now.
-// Higher score = evicted first (large, cold keys).
+// weightedScore: higher score = evicted first (large, cold keys).
 //
 //	score = (size_bytes / 1e9 * sizeWeight) * (hours_since_last_access * ageWeight)
 func weightedScore(entry *evictionEntry, sizeWeight, ageWeight float64, now time.Time) float64 {
@@ -86,8 +86,8 @@ func checkEviction(ctx context.Context, store *BadgerStore) error {
 		return nil
 	}
 
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].score > candidates[j].score
+	slices.SortFunc(candidates, func(a, b candidate) int {
+		return cmp.Compare(b.score, a.score) // descending
 	})
 
 	// Delete keys in score order until storage is below the threshold.
