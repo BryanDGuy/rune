@@ -281,10 +281,6 @@ log-level: info
 
 ## License
 
-Rune is licensed under **Apache 2.0**.
+Rune is licensed under **MIT**.
 
-Apache 2.0 is the standard for open source infrastructure projects — it includes an explicit patent grant (important for a storage engine), imposes no restrictions on commercial use, and creates zero friction for enterprise adoption. SDK distribution in multiple languages is straightforward under Apache 2.0.
-
-This matches the license used by Kvrocks and etcd, the two projects most architecturally similar to Rune.
-
-All external contributors must sign a CLA (Contributor License Agreement) before their code is merged. This is standard practice for open source infrastructure projects and keeps future options open.
+MIT is the simplest and most widely adopted permissive license — no restrictions on commercial use, no patent clauses, minimal friction for adoption. Anyone can use, modify, and distribute Rune freely.
