@@ -83,7 +83,7 @@ func newEvictionTestStore(t *testing.T, maxBytes int64) *BadgerStore {
 	}
 	s, err := NewBadgerStore(cfg)
 	require.NoError(t, err)
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	return s
 }
 

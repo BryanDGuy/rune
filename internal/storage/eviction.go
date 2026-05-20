@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"sync"
 	"time"
@@ -88,6 +89,10 @@ func checkEviction(ctx context.Context, store *BadgerStore) error {
 
 	// Delete keys in score order until storage is below the threshold.
 	for _, c := range candidates {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
 		// Re-check storage after each delete to avoid over-eviction.
 		lsm, vlog = store.db.Size()
 		if lsm+vlog < threshold {
@@ -98,7 +103,7 @@ func checkEviction(ctx context.Context, store *BadgerStore) error {
 		var deleted bool
 		err := store.db.Update(func(txn *badger.Txn) error {
 			_, err := txn.Get([]byte(key))
-			if err == badger.ErrKeyNotFound {
+			if errors.Is(err, badger.ErrKeyNotFound) {
 				return nil
 			}
 			if err != nil {
@@ -110,8 +115,10 @@ func checkEviction(ctx context.Context, store *BadgerStore) error {
 		if err != nil {
 			return err
 		}
+		// Always remove from index: either we deleted it or it was already gone
+		// (expired by TTL). Prevents unbounded index growth for TTL workloads.
+		store.eviction.remove(key)
 		if deleted {
-			store.eviction.remove(key)
 			store.evictionsTotal.Add(1)
 		}
 	}

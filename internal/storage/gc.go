@@ -61,6 +61,8 @@ func (s *BadgerStore) maintenanceLoop(ctx context.Context) {
 			used := lsm + vlog
 			threshold := int64(float64(s.cfg.MaxStorageBytes) * s.cfg.EvictionThreshold)
 			if used >= threshold {
+				// Evict large cold keys first, then GC the freed value log space.
+				_ = checkEviction(ctx, s)
 				s.runGC(ctx)
 			}
 		}
