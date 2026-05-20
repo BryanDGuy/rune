@@ -1,17 +1,3 @@
-// Copyright 2026 BryanDGuy
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package runesdk
 
 import (
@@ -70,7 +56,7 @@ func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts ...SetOp
 	}
 
 	// Send header first.
-	if err := stream.Send(&runev1.SetRequest{
+	if err = stream.Send(&runev1.SetRequest{
 		Payload: &runev1.SetRequest_Header{
 			Header: &runev1.SetHeader{
 				Key:        key,
@@ -86,13 +72,13 @@ func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts ...SetOp
 	for {
 		n, readErr := io.ReadFull(r, buf)
 		if n > 0 {
-			if err := stream.Send(&runev1.SetRequest{
+			if err = stream.Send(&runev1.SetRequest{
 				Payload: &runev1.SetRequest_Chunk{Chunk: buf[:n]},
 			}); err != nil {
 				return err
 			}
 		}
-		if readErr == io.EOF || readErr == io.ErrUnexpectedEOF {
+		if errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF) {
 			break
 		}
 		if readErr != nil {
@@ -122,7 +108,7 @@ func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	resp, err := stream.Recv()
 	if err != nil {
 		cancel()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return io.NopCloser(io.Reader(emptyReader{})), nil
 		}
 		if status.Code(err) == codes.NotFound {
@@ -145,14 +131,14 @@ func (c *Client) Close() error {
 // streamReader implements io.ReadCloser over a server-streaming gRPC call.
 type streamReader struct {
 	stream grpc.ServerStreamingClient[runev1.GetResponse]
-	buf    []byte
 	cancel context.CancelFunc
+	buf    []byte
 }
 
 func (r *streamReader) Read(p []byte) (int, error) {
 	for len(r.buf) == 0 {
 		resp, err := r.stream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return 0, io.EOF
 		}
 		if err != nil {

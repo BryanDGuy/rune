@@ -1,17 +1,3 @@
-// Copyright 2026 BryanDGuy
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package storage
 
 import (
@@ -20,24 +6,25 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	badger "github.com/dgraph-io/badger/v4"
 	"github.com/bryandguy/rune/internal/config"
+	badger "github.com/dgraph-io/badger/v4"
 )
 
 type BadgerStore struct {
 	db             *badger.DB
 	cfg            *config.Config
 	eviction       *evictionIndex
+	cancel         context.CancelFunc
+	wg             sync.WaitGroup
 	hits           atomic.Int64
 	misses         atomic.Int64
 	evictionsTotal atomic.Int64
 	gcRunning      atomic.Bool
-	cancel         context.CancelFunc
-	wg             sync.WaitGroup
 }
 
 func NewBadgerStore(cfg *config.Config) (*BadgerStore, error) {
@@ -58,7 +45,7 @@ func NewBadgerStore(cfg *config.Config) (*BadgerStore, error) {
 
 	if err := s.initEvictionIndex(); err != nil {
 		cancel()
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("init eviction index: %w", err)
 	}
 
@@ -197,6 +184,10 @@ func (s *BadgerStore) TTL(_ context.Context, key string) (int64, error) {
 			ttlSecs = -1
 			return nil
 		}
+		if expiresAt > math.MaxInt64 {
+			ttlSecs = -1
+			return nil
+		}
 		remaining := time.Until(time.Unix(int64(expiresAt), 0))
 		if remaining <= 0 {
 			// Key has expired but BadgerDB hasn't reaped it yet — treat as not found.
@@ -227,9 +218,9 @@ func (s *BadgerStore) Persist(_ context.Context, key string) (bool, error) {
 	return found, err
 }
 
-func (s *BadgerStore) Info(_ context.Context) (StorageInfo, error) {
+func (s *BadgerStore) Info(_ context.Context) (Info, error) {
 	lsm, vlog := s.db.Size()
-	return StorageInfo{
+	return Info{
 		UsedBytes:      lsm + vlog,
 		MaxBytes:       s.cfg.MaxStorageBytes,
 		Hits:           s.hits.Load(),

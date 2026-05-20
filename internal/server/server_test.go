@@ -1,22 +1,9 @@
-// Copyright 2026 BryanDGuy
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package server_test
 
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"testing"
 
@@ -109,7 +96,7 @@ func TestSetGet(t *testing.T) {
 	var got []byte
 	for {
 		resp, err := getStream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)
@@ -231,8 +218,8 @@ func TestInfo(t *testing.T) {
 	stream, err := client.Get(ctx, &runev1.GetRequest{Key: "info-key"})
 	require.NoError(t, err)
 	for {
-		_, err := stream.Recv()
-		if err == io.EOF {
+		_, err = stream.Recv()
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)
@@ -247,7 +234,7 @@ func TestInfo(t *testing.T) {
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, info.CacheHits, int64(1))
 	assert.GreaterOrEqual(t, info.CacheMisses, int64(1))
-	assert.Greater(t, info.StorageMaxBytes, int64(0))
+	assert.Positive(t, info.StorageMaxBytes)
 	assert.GreaterOrEqual(t, info.ActiveConnections, int64(0))
 }
 
@@ -280,12 +267,12 @@ func TestLargePayload(t *testing.T) {
 	var got []byte
 	for {
 		resp, err := getStream.Recv()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)
 		got = append(got, resp.Chunk...)
 	}
-	require.Equal(t, size, len(got))
+	require.Len(t, got, size)
 	assert.Equal(t, payload, got)
 }

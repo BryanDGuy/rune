@@ -1,22 +1,10 @@
-// Copyright 2026 BryanDGuy
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package config
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -25,27 +13,27 @@ import (
 )
 
 type Config struct {
-	Port               int           `yaml:"port"`
+	LogLevel           string        `yaml:"log-level"`
 	DataDir            string        `yaml:"data-dir"`
 	MaxStorage         string        `yaml:"max-storage"`
-	MaxStorageBytes    int64         `yaml:"-"`
+	EvictionAgeWeight  float64       `yaml:"eviction-age-weight"`
 	EvictionThreshold  float64       `yaml:"eviction-threshold"`
 	EvictionSizeWeight float64       `yaml:"eviction-size-weight"`
-	EvictionAgeWeight  float64       `yaml:"eviction-age-weight"`
+	Port               int           `yaml:"port"`
 	StreamChunkSize    int           `yaml:"stream-chunk-size"`
 	GCInterval         time.Duration `yaml:"gc-interval"`
 	GCDiscardRatio     float64       `yaml:"gc-discard-ratio"`
 	TTLSweepInterval   time.Duration `yaml:"ttl-sweep-interval"`
-	LogLevel           string        `yaml:"log-level"`
+	MaxStorageBytes    int64         `yaml:"-"`
 	MetricsPort        int           `yaml:"metrics-port"`
 }
 
 func defaults() *Config {
 	return &Config{
-		Port:              7946,
-		DataDir:           "/var/rune/data",
-		MaxStorage:        "100GB",
-		EvictionThreshold: 0.8,
+		Port:               7946,
+		DataDir:            "/var/rune/data",
+		MaxStorage:         "100GB",
+		EvictionThreshold:  0.8,
 		EvictionSizeWeight: 1.0,
 		EvictionAgeWeight:  1.0,
 		StreamChunkSize:    1024 * 1024, // 1MB
@@ -61,7 +49,11 @@ func LoadConfig(path string) (*Config, error) {
 	cfg := defaults()
 
 	if path != "" {
-		data, err := os.ReadFile(path)
+		absPath, err := filepath.Abs(filepath.Clean(path))
+		if err != nil {
+			return nil, fmt.Errorf("resolve config path: %w", err)
+		}
+		data, err := fs.ReadFile(os.DirFS(filepath.Dir(absPath)), filepath.Base(absPath))
 		if err != nil {
 			return nil, fmt.Errorf("read config: %w", err)
 		}

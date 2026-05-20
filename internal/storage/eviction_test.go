@@ -1,17 +1,3 @@
-// Copyright 2026 BryanDGuy
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package storage
 
 import (
@@ -131,10 +117,10 @@ func TestEvictionTriggersUnderPressure(t *testing.T) {
 
 	// cold-large has the highest score and should be gone.
 	_, errCold := s.Get(ctx, "cold-large")
-	assert.ErrorIs(t, errCold, ErrNotFound, "cold-large should have been evicted")
+	require.ErrorIs(t, errCold, ErrNotFound, "cold-large should have been evicted")
 
 	// At least one key was evicted.
-	assert.Greater(t, s.evictionsTotal.Load(), int64(0), "evictionsTotal should be > 0")
+	assert.Positive(t, s.evictionsTotal.Load(), "evictionsTotal should be > 0")
 }
 
 // TestEvictionCounterIncrements verifies that evictionsTotal is incremented

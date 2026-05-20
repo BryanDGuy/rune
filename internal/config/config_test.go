@@ -1,17 +1,3 @@
-// Copyright 2026 BryanDGuy
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package config
 
 import (
@@ -28,9 +14,9 @@ func TestDefaults(t *testing.T) {
 	assert.Equal(t, 7946, cfg.Port)
 	assert.Equal(t, "/var/rune/data", cfg.DataDir)
 	assert.Equal(t, int64(107374182400), cfg.MaxStorageBytes) // 100GB
-	assert.Equal(t, 0.8, cfg.EvictionThreshold)
-	assert.Equal(t, 1.0, cfg.EvictionSizeWeight)
-	assert.Equal(t, 1.0, cfg.EvictionAgeWeight)
+	assert.InDelta(t, 0.8, cfg.EvictionThreshold, 1e-9)
+	assert.InDelta(t, 1.0, cfg.EvictionSizeWeight, 1e-9)
+	assert.InDelta(t, 1.0, cfg.EvictionAgeWeight, 1e-9)
 	assert.Equal(t, 1024*1024, cfg.StreamChunkSize) // 1MB
 	assert.Equal(t, "info", cfg.LogLevel)
 	assert.Equal(t, 9090, cfg.MetricsPort)
@@ -61,13 +47,12 @@ func TestEnvOverride(t *testing.T) {
 }
 
 func TestYAMLFile(t *testing.T) {
-	f, err := os.CreateTemp("", "rune-config-*.yaml")
+	f, err := os.CreateTemp(t.TempDir(), "rune-config-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(f.Name())
 
 	_, err = f.WriteString("port: 8888\nlog-level: debug\n")
 	require.NoError(t, err)
-	f.Close()
+	require.NoError(t, f.Close())
 
 	cfg, err := LoadConfig(f.Name())
 	require.NoError(t, err)
