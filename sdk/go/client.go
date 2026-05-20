@@ -30,7 +30,6 @@ type Client struct {
 }
 
 // New creates a Client connected to addr (e.g. "localhost:7946").
-// Uses insecure credentials; TLS is a future concern.
 func New(addr string, opts ...grpc.DialOption) (*Client, error) {
 	defaults := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
