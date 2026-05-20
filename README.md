@@ -119,4 +119,4 @@ All external contributors must sign a CLA before their code is merged. Open an i
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
