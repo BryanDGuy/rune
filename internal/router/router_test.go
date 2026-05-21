@@ -9,19 +9,19 @@ import (
 )
 
 func TestLookupEmptyRing(t *testing.T) {
-	r := New(2)
+	r := New()
 	_, err := r.Lookup("any-key")
 	assert.ErrorIs(t, err, ErrNoNodes)
 }
 
 func TestLookupNEmptyRing(t *testing.T) {
-	r := New(2)
+	r := New()
 	_, err := r.LookupN("any-key", 1)
 	assert.ErrorIs(t, err, ErrNoNodes)
 }
 
 func TestLookupSingleNode(t *testing.T) {
-	r := New(2)
+	r := New()
 	n := Node{ID: "node-1", Addr: "host1:7946"}
 	r.Add(n)
 	got, err := r.Lookup("any-key")
@@ -30,7 +30,7 @@ func TestLookupSingleNode(t *testing.T) {
 }
 
 func TestLookupNDistinctNodes(t *testing.T) {
-	r := New(2)
+	r := New()
 	r.Add(Node{ID: "node-1", Addr: "host1:7946"})
 	r.Add(Node{ID: "node-2", Addr: "host2:7946"})
 
@@ -41,7 +41,7 @@ func TestLookupNDistinctNodes(t *testing.T) {
 }
 
 func TestLookupNPartialWhenFewer(t *testing.T) {
-	r := New(2)
+	r := New()
 	r.Add(Node{ID: "node-1", Addr: "host1:7946"})
 
 	nodes, err := r.LookupN("my-key", 3)
@@ -50,7 +50,7 @@ func TestLookupNPartialWhenFewer(t *testing.T) {
 }
 
 func TestLen(t *testing.T) {
-	r := New(2)
+	r := New()
 	assert.Equal(t, 0, r.Len())
 	r.Add(Node{ID: "node-1", Addr: "host1:7946"})
 	assert.Equal(t, 1, r.Len())
@@ -61,7 +61,7 @@ func TestLen(t *testing.T) {
 }
 
 func TestRemoveExcludesNode(t *testing.T) {
-	r := New(2)
+	r := New()
 	r.Add(Node{ID: "node-1", Addr: "host1:7946"})
 	r.Add(Node{ID: "node-2", Addr: "host2:7946"})
 	r.Remove("node-1")
@@ -74,7 +74,7 @@ func TestRemoveExcludesNode(t *testing.T) {
 }
 
 func TestStabilityOnNodeRemoval(t *testing.T) {
-	r := New(2)
+	r := New()
 	for i := 1; i <= 5; i++ {
 		r.Add(Node{ID: fmt.Sprintf("node-%d", i), Addr: fmt.Sprintf("host%d:7946", i)})
 	}
@@ -107,7 +107,7 @@ func TestStabilityOnNodeRemoval(t *testing.T) {
 }
 
 func TestDistribution(t *testing.T) {
-	r := New(2)
+	r := New()
 	r.Add(Node{ID: "node-1", Addr: "host1:7946"})
 	r.Add(Node{ID: "node-2", Addr: "host2:7946"})
 	r.Add(Node{ID: "node-3", Addr: "host3:7946"})
@@ -123,13 +123,13 @@ func TestDistribution(t *testing.T) {
 	require.Len(t, counts, 3, "all 3 nodes should own at least one key")
 	for id, count := range counts {
 		pct := float64(count) / float64(total)
-		assert.Greater(t, pct, 0.20, "node %s owns %.1f%% — less than 20%%", id, pct*100)
-		assert.Less(t, pct, 0.47, "node %s owns %.1f%% — more than 47%%", id, pct*100)
+		assert.Greater(t, pct, 0.27, "node %s owns %.1f%% — less than 27%%", id, pct*100)
+		assert.Less(t, pct, 0.40, "node %s owns %.1f%% — more than 40%%", id, pct*100)
 	}
 }
 
 func TestAddrPreserved(t *testing.T) {
-	r := New(2)
+	r := New()
 	n := Node{ID: "node-1", Addr: "rune-0.rune.svc.cluster.local:7946"}
 	r.Add(n)
 	got, err := r.Lookup("any-key")

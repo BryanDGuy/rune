@@ -32,18 +32,16 @@ type Router struct {
 	nodes map[string]Node // ID → Node, for Addr lookup after ring resolution
 }
 
-// New creates a Router. replicationFactor is stored for Plan 2b use; it does not
-// affect ring placement (use LookupN with explicit n for replica selection).
-func New(replicationFactor int) *Router {
+// New creates a Router.
+// It uses a high Load to disable bounded-load redistribution; this preserves
+// standard consistent hash stability (only keys owned by a removed node remap).
+func New() *Router {
 	cfg := consistent.Config{
-		PartitionCount:    271,
+		PartitionCount:    271, // prime; distributes partitions evenly across the ring
 		ReplicationFactor: 20,
-		// Load is set high to disable bounded-load redistribution; this preserves
-		// standard consistent hash stability (only keys owned by a removed node remap).
-		Load:   10.0,
-		Hasher: xxHasher{},
+		Load:              10.0,
+		Hasher:            xxHasher{},
 	}
-	_ = replicationFactor // used by Plan 2b server/SDK wiring
 	return &Router{
 		ring:  consistent.New(nil, cfg),
 		nodes: make(map[string]Node),
@@ -92,6 +90,9 @@ func (r *Router) LookupN(key string, n int) ([]Node, error) {
 		count = len(r.nodes)
 	}
 
+	// ErrInsufficientMemberCount from the library is unreachable here:
+	// count was capped to len(r.nodes) which is kept in sync with the
+	// library's member map under the same write lock.
 	members, err := r.ring.GetClosestN([]byte(key), count)
 	if err != nil {
 		return nil, err
