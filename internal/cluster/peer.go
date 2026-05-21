@@ -1,7 +1,9 @@
 package cluster
 
 import (
+	"context"
 	"errors"
+	"net"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -9,6 +11,11 @@ import (
 )
 
 var errDialerClosed = errors.New("cluster: PeerDialer is closed")
+
+// DialOptions configures a Dial call. A nil pointer means production defaults.
+type DialOptions struct {
+	ContextDialer func(context.Context, string) (net.Conn, error)
+}
 
 // PeerDialer maintains a pool of gRPC connections to peer Rune nodes.
 type PeerDialer struct {
@@ -21,9 +28,7 @@ func NewPeerDialer() *PeerDialer {
 	return &PeerDialer{conns: make(map[string]*grpc.ClientConn)}
 }
 
-// Dial returns a cached connection to addr, or dials a new one.
-// Extra opts are passed to grpc.NewClient only on the first dial; use for testing overrides.
-func (d *PeerDialer) Dial(addr string, extraOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
+func (d *PeerDialer) Dial(addr string, opts *DialOptions) (*grpc.ClientConn, error) {
 	d.mu.RLock()
 	if d.closed {
 		d.mu.RUnlock()
@@ -44,10 +49,11 @@ func (d *PeerDialer) Dial(addr string, extraOpts ...grpc.DialOption) (*grpc.Clie
 		return conn, nil
 	}
 
-	opts := make([]grpc.DialOption, 0, 1+len(extraOpts))
-	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	opts = append(opts, extraOpts...)
-	conn, err := grpc.NewClient(addr, opts...)
+	grpcOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	if opts != nil && opts.ContextDialer != nil {
+		grpcOpts = append(grpcOpts, grpc.WithContextDialer(opts.ContextDialer))
+	}
+	conn, err := grpc.NewClient(addr, grpcOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +76,6 @@ func (d *PeerDialer) DialWith(addr string, conn *grpc.ClientConn) error {
 	return nil
 }
 
-// Close closes all pooled connections.
 func (d *PeerDialer) Close() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
