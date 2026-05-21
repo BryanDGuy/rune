@@ -18,8 +18,8 @@ type Config struct {
 	Port               int
 	MetricsPort        int
 	StreamChunkSize    int
-	GCInterval     time.Duration
-	GCDiscardRatio float64
+	GCInterval         time.Duration
+	GCDiscardRatio     float64
 }
 
 // LoadConfig builds a Config from environment variables, falling back to defaults.
@@ -48,8 +48,8 @@ func LoadConfig() (*Config, error) {
 		EvictionSizeWeight: 1.0,
 		EvictionAgeWeight:  1.0,
 		StreamChunkSize:    1024 * 1024, // 1MB
-		GCInterval:     10 * time.Minute,
-		GCDiscardRatio: 0.5,
+		GCInterval:         10 * time.Minute,
+		GCDiscardRatio:     0.5,
 	}
 
 	var err error

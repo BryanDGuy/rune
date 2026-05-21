@@ -12,7 +12,6 @@ import (
 	badger "github.com/dgraph-io/badger/v4"
 )
 
-
 type BadgerStore struct {
 	db             *badger.DB
 	cfg            *config.Config

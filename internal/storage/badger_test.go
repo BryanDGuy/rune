@@ -20,7 +20,6 @@ func baseStorageTestConfig(t *testing.T) *config.Config {
 		EvictionAgeWeight:  1.0,
 		GCInterval:         time.Hour,
 		GCDiscardRatio:     0.5,
-
 	}
 }
 
