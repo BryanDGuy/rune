@@ -25,7 +25,7 @@ func (h xxHasher) Sum64(data []byte) uint64 { return xxhash.Sum64(data) }
 
 type Router struct {
 	ring  *consistent.Consistent
-	nodes map[string]Node // ID → Node, for Addr lookup after ring resolution
+	nodes map[string]Node
 	mu    sync.RWMutex
 }
 

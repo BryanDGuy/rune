@@ -6,14 +6,15 @@ import (
 	"errors"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	badger "github.com/dgraph-io/badger/v4"
 )
 
 type evictionEntry struct {
-	lastAccessed time.Time
-	size         int64
+	lastAccessedNano atomic.Int64
+	size             int64
 }
 
 type evictionIndex struct {
@@ -26,16 +27,19 @@ func newEvictionIndex() *evictionIndex {
 }
 
 func (e *evictionIndex) recordSet(key string, size int64) {
+	entry := &evictionEntry{size: size}
+	entry.lastAccessedNano.Store(time.Now().UnixNano())
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.entries[key] = &evictionEntry{size: size, lastAccessed: time.Now()}
+	e.entries[key] = entry
 }
 
 func (e *evictionIndex) recordAccess(key string) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if entry, ok := e.entries[key]; ok {
-		entry.lastAccessed = time.Now()
+	e.mu.RLock()
+	entry, ok := e.entries[key]
+	e.mu.RUnlock()
+	if ok {
+		entry.lastAccessedNano.Store(time.Now().UnixNano())
 	}
 }
 
@@ -50,7 +54,8 @@ func (e *evictionIndex) remove(key string) {
 //	score = (size_bytes / 1e9 * sizeWeight) * (hours_since_last_access * ageWeight)
 func weightedScore(entry *evictionEntry, sizeWeight, ageWeight float64, now time.Time) float64 {
 	sizeGB := float64(entry.size) / 1e9
-	hoursSinceAccess := now.Sub(entry.lastAccessed).Hours()
+	lastAccessed := time.Unix(0, entry.lastAccessedNano.Load())
+	hoursSinceAccess := now.Sub(lastAccessed).Hours()
 	return (sizeGB * sizeWeight) * (hoursSinceAccess * ageWeight)
 }
 

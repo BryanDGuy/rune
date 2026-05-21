@@ -9,6 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func newEntry(size int64, lastAccessed time.Time) *evictionEntry {
+	e := &evictionEntry{size: size}
+	e.lastAccessedNano.Store(lastAccessed.UnixNano())
+	return e
+}
+
 // TestEvictionWeightedScore verifies the score formula:
 //
 //	score = (size_bytes / 1e9 * sizeWeight) * (hours_since_access * ageWeight)
@@ -17,18 +23,9 @@ import (
 func TestEvictionWeightedScore(t *testing.T) {
 	now := time.Now()
 
-	largeCold := &evictionEntry{
-		size:         500 * 1024 * 1024, // 500 MB
-		lastAccessed: now.Add(-48 * time.Hour),
-	}
-	largeHot := &evictionEntry{
-		size:         500 * 1024 * 1024, // 500 MB
-		lastAccessed: now.Add(-1 * time.Hour),
-	}
-	smallCold := &evictionEntry{
-		size:         1 * 1024 * 1024, // 1 MB
-		lastAccessed: now.Add(-48 * time.Hour),
-	}
+	largeCold := newEntry(500*1024*1024, now.Add(-48*time.Hour))
+	largeHot := newEntry(500*1024*1024, now.Add(-1*time.Hour))
+	smallCold := newEntry(1*1024*1024, now.Add(-48*time.Hour))
 
 	scoreLargeCold := weightedScore(largeCold, 1.0, 1.0, now)
 	scoreLargeHot := weightedScore(largeHot, 1.0, 1.0, now)
@@ -40,7 +37,8 @@ func TestEvictionWeightedScore(t *testing.T) {
 
 	// Verify the formula: size_gb=0.5, hours=48 → score=24.0
 	sizeGB := float64(largeCold.size) / 1e9
-	hours := now.Sub(largeCold.lastAccessed).Hours()
+	lastAccessed := time.Unix(0, largeCold.lastAccessedNano.Load())
+	hours := now.Sub(lastAccessed).Hours()
 	expected := sizeGB * 1.0 * hours * 1.0
 	assert.InDelta(t, expected, scoreLargeCold, 0.001)
 }
@@ -48,10 +46,7 @@ func TestEvictionWeightedScore(t *testing.T) {
 // TestEvictionWeightedScoreWeights verifies that custom weights scale the score correctly.
 func TestEvictionWeightedScoreWeights(t *testing.T) {
 	now := time.Now()
-	entry := &evictionEntry{
-		size:         1_000_000_000, // exactly 1 GB
-		lastAccessed: now.Add(-2 * time.Hour),
-	}
+	entry := newEntry(1_000_000_000, now.Add(-2*time.Hour)) // exactly 1 GB
 
 	score1 := weightedScore(entry, 1.0, 1.0, now) // expected: 1.0 * 2.0 = 2.0
 	score2 := weightedScore(entry, 2.0, 1.0, now) // expected: 2.0 * 2.0 = 4.0
@@ -95,18 +90,9 @@ func TestEvictionTriggersUnderPressure(t *testing.T) {
 	// to produce predictable scores regardless of when the test runs.
 	now := time.Now()
 	s.eviction.mu.Lock()
-	s.eviction.entries["hot-small"] = &evictionEntry{
-		size:         1 * 1024 * 1024, // 1 MB
-		lastAccessed: now.Add(-1 * time.Hour),
-	}
-	s.eviction.entries["hot-large"] = &evictionEntry{
-		size:         500 * 1024 * 1024, // 500 MB
-		lastAccessed: now.Add(-1 * time.Hour),
-	}
-	s.eviction.entries["cold-large"] = &evictionEntry{
-		size:         500 * 1024 * 1024, // 500 MB
-		lastAccessed: now.Add(-100 * time.Hour),
-	}
+	s.eviction.entries["hot-small"] = newEntry(1*1024*1024, now.Add(-1*time.Hour))
+	s.eviction.entries["hot-large"] = newEntry(500*1024*1024, now.Add(-1*time.Hour))
+	s.eviction.entries["cold-large"] = newEntry(500*1024*1024, now.Add(-100*time.Hour))
 	s.eviction.mu.Unlock()
 
 	// Run eviction. Because MaxStorageBytes = 1 and db.Size() > 0, the
@@ -137,14 +123,8 @@ func TestEvictionCounterIncrements(t *testing.T) {
 	// Assign large sizes + old access so both get evicted.
 	now := time.Now()
 	s.eviction.mu.Lock()
-	s.eviction.entries["key-a"] = &evictionEntry{
-		size:         500 * 1024 * 1024,
-		lastAccessed: now.Add(-100 * time.Hour),
-	}
-	s.eviction.entries["key-b"] = &evictionEntry{
-		size:         500 * 1024 * 1024,
-		lastAccessed: now.Add(-200 * time.Hour),
-	}
+	s.eviction.entries["key-a"] = newEntry(500*1024*1024, now.Add(-100*time.Hour))
+	s.eviction.entries["key-b"] = newEntry(500*1024*1024, now.Add(-200*time.Hour))
 	s.eviction.mu.Unlock()
 
 	before := s.evictionsTotal.Load()
