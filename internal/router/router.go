@@ -66,12 +66,17 @@ func (r *Router) Remove(id string) {
 
 // Lookup returns the primary owning node for key.
 // Returns ErrNoNodes if the ring is empty.
+// Lookup returns the primary owning node for key.
+// Returns ErrNoNodes if the ring is empty.
 func (r *Router) Lookup(key string) (Node, error) {
-	nodes, err := r.LookupN(key, 1)
-	if err != nil {
-		return Node{}, err
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if len(r.nodes) == 0 {
+		return Node{}, ErrNoNodes
 	}
-	return nodes[0], nil
+	m := r.ring.LocateKey([]byte(key))
+	return r.nodes[m.String()], nil
 }
 
 // LookupN returns up to n nodes for key in ring order — primary first, then replicas.
