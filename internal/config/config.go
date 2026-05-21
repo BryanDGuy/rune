@@ -20,7 +20,6 @@ type Config struct {
 	StreamChunkSize    int
 	GCInterval         time.Duration
 	GCDiscardRatio     float64
-	TTLSweepInterval   time.Duration
 }
 
 // LoadConfig builds a Config from environment variables, falling back to defaults.
@@ -38,7 +37,6 @@ type Config struct {
 //	RUNE_STREAM_CHUNK_SIZE  (default: 1048576)
 //	RUNE_GC_INTERVAL        (default: 10m)
 //	RUNE_GC_DISCARD_RATIO   (default: 0.5)
-//	RUNE_TTL_SWEEP_INTERVAL (default: 60s)
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		Port:               7946,
@@ -52,7 +50,6 @@ func LoadConfig() (*Config, error) {
 		StreamChunkSize:    1024 * 1024, // 1MB
 		GCInterval:         10 * time.Minute,
 		GCDiscardRatio:     0.5,
-		TTLSweepInterval:   60 * time.Second,
 	}
 
 	var err error
@@ -108,12 +105,6 @@ func LoadConfig() (*Config, error) {
 			return nil, fmt.Errorf("RUNE_GC_DISCARD_RATIO: %w", err)
 		}
 	}
-	if v := os.Getenv("RUNE_TTL_SWEEP_INTERVAL"); v != "" {
-		if cfg.TTLSweepInterval, err = time.ParseDuration(v); err != nil {
-			return nil, fmt.Errorf("RUNE_TTL_SWEEP_INTERVAL: %w", err)
-		}
-	}
-
 	return cfg, nil
 }
 

@@ -535,279 +535,6 @@ func (x *ExistsResponse) GetCount() int64 {
 	return 0
 }
 
-type ExpireRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	TtlSeconds    int64                  `protobuf:"varint,2,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ExpireRequest) Reset() {
-	*x = ExpireRequest{}
-	mi := &file_rune_v1_rune_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ExpireRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ExpireRequest) ProtoMessage() {}
-
-func (x *ExpireRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rune_v1_rune_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ExpireRequest.ProtoReflect.Descriptor instead.
-func (*ExpireRequest) Descriptor() ([]byte, []int) {
-	return file_rune_v1_rune_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *ExpireRequest) GetKey() string {
-	if x != nil {
-		return x.Key
-	}
-	return ""
-}
-
-func (x *ExpireRequest) GetTtlSeconds() int64 {
-	if x != nil {
-		return x.TtlSeconds
-	}
-	return 0
-}
-
-type ExpireResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ExpireResponse) Reset() {
-	*x = ExpireResponse{}
-	mi := &file_rune_v1_rune_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ExpireResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ExpireResponse) ProtoMessage() {}
-
-func (x *ExpireResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rune_v1_rune_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ExpireResponse.ProtoReflect.Descriptor instead.
-func (*ExpireResponse) Descriptor() ([]byte, []int) {
-	return file_rune_v1_rune_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *ExpireResponse) GetOk() bool {
-	if x != nil {
-		return x.Ok
-	}
-	return false
-}
-
-type TTLRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TTLRequest) Reset() {
-	*x = TTLRequest{}
-	mi := &file_rune_v1_rune_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TTLRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TTLRequest) ProtoMessage() {}
-
-func (x *TTLRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rune_v1_rune_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TTLRequest.ProtoReflect.Descriptor instead.
-func (*TTLRequest) Descriptor() ([]byte, []int) {
-	return file_rune_v1_rune_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *TTLRequest) GetKey() string {
-	if x != nil {
-		return x.Key
-	}
-	return ""
-}
-
-type TTLResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// -1 = no TTL (persists indefinitely). -2 = key not found.
-	TtlSeconds    int64 `protobuf:"varint,1,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TTLResponse) Reset() {
-	*x = TTLResponse{}
-	mi := &file_rune_v1_rune_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TTLResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TTLResponse) ProtoMessage() {}
-
-func (x *TTLResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rune_v1_rune_proto_msgTypes[14]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TTLResponse.ProtoReflect.Descriptor instead.
-func (*TTLResponse) Descriptor() ([]byte, []int) {
-	return file_rune_v1_rune_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *TTLResponse) GetTtlSeconds() int64 {
-	if x != nil {
-		return x.TtlSeconds
-	}
-	return 0
-}
-
-type PersistRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PersistRequest) Reset() {
-	*x = PersistRequest{}
-	mi := &file_rune_v1_rune_proto_msgTypes[15]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PersistRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PersistRequest) ProtoMessage() {}
-
-func (x *PersistRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rune_v1_rune_proto_msgTypes[15]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PersistRequest.ProtoReflect.Descriptor instead.
-func (*PersistRequest) Descriptor() ([]byte, []int) {
-	return file_rune_v1_rune_proto_rawDescGZIP(), []int{15}
-}
-
-func (x *PersistRequest) GetKey() string {
-	if x != nil {
-		return x.Key
-	}
-	return ""
-}
-
-type PersistResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PersistResponse) Reset() {
-	*x = PersistResponse{}
-	mi := &file_rune_v1_rune_proto_msgTypes[16]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PersistResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PersistResponse) ProtoMessage() {}
-
-func (x *PersistResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rune_v1_rune_proto_msgTypes[16]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PersistResponse.ProtoReflect.Descriptor instead.
-func (*PersistResponse) Descriptor() ([]byte, []int) {
-	return file_rune_v1_rune_proto_rawDescGZIP(), []int{16}
-}
-
-func (x *PersistResponse) GetOk() bool {
-	if x != nil {
-		return x.Ok
-	}
-	return false
-}
-
 type InfoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -816,7 +543,7 @@ type InfoRequest struct {
 
 func (x *InfoRequest) Reset() {
 	*x = InfoRequest{}
-	mi := &file_rune_v1_rune_proto_msgTypes[17]
+	mi := &file_rune_v1_rune_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -828,7 +555,7 @@ func (x *InfoRequest) String() string {
 func (*InfoRequest) ProtoMessage() {}
 
 func (x *InfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rune_v1_rune_proto_msgTypes[17]
+	mi := &file_rune_v1_rune_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -841,7 +568,7 @@ func (x *InfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InfoRequest.ProtoReflect.Descriptor instead.
 func (*InfoRequest) Descriptor() ([]byte, []int) {
-	return file_rune_v1_rune_proto_rawDescGZIP(), []int{17}
+	return file_rune_v1_rune_proto_rawDescGZIP(), []int{11}
 }
 
 type InfoResponse struct {
@@ -858,7 +585,7 @@ type InfoResponse struct {
 
 func (x *InfoResponse) Reset() {
 	*x = InfoResponse{}
-	mi := &file_rune_v1_rune_proto_msgTypes[18]
+	mi := &file_rune_v1_rune_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -870,7 +597,7 @@ func (x *InfoResponse) String() string {
 func (*InfoResponse) ProtoMessage() {}
 
 func (x *InfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rune_v1_rune_proto_msgTypes[18]
+	mi := &file_rune_v1_rune_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -883,7 +610,7 @@ func (x *InfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InfoResponse.ProtoReflect.Descriptor instead.
 func (*InfoResponse) Descriptor() ([]byte, []int) {
-	return file_rune_v1_rune_proto_rawDescGZIP(), []int{18}
+	return file_rune_v1_rune_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *InfoResponse) GetStorageUsedBytes() int64 {
@@ -958,23 +685,7 @@ const file_rune_v1_rune_proto_rawDesc = "" +
 	"\rExistsRequest\x12\x12\n" +
 	"\x04keys\x18\x01 \x03(\tR\x04keys\"&\n" +
 	"\x0eExistsResponse\x12\x14\n" +
-	"\x05count\x18\x01 \x01(\x03R\x05count\"B\n" +
-	"\rExpireRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x1f\n" +
-	"\vttl_seconds\x18\x02 \x01(\x03R\n" +
-	"ttlSeconds\" \n" +
-	"\x0eExpireResponse\x12\x0e\n" +
-	"\x02ok\x18\x01 \x01(\bR\x02ok\"\x1e\n" +
-	"\n" +
-	"TTLRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\".\n" +
-	"\vTTLResponse\x12\x1f\n" +
-	"\vttl_seconds\x18\x01 \x01(\x03R\n" +
-	"ttlSeconds\"\"\n" +
-	"\x0ePersistRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\"!\n" +
-	"\x0fPersistResponse\x12\x0e\n" +
-	"\x02ok\x18\x01 \x01(\bR\x02ok\"\r\n" +
+	"\x05count\x18\x01 \x01(\x03R\x05count\"\r\n" +
 	"\vInfoRequest\"\x82\x02\n" +
 	"\fInfoResponse\x12,\n" +
 	"\x12storage_used_bytes\x18\x01 \x01(\x03R\x10storageUsedBytes\x12*\n" +
@@ -983,16 +694,13 @@ const file_rune_v1_rune_proto_rawDesc = "" +
 	"cache_hits\x18\x03 \x01(\x03R\tcacheHits\x12!\n" +
 	"\fcache_misses\x18\x04 \x01(\x03R\vcacheMisses\x12-\n" +
 	"\x12active_connections\x18\x05 \x01(\x03R\x11activeConnections\x12'\n" +
-	"\x0fevictions_total\x18\x06 \x01(\x03R\x0eevictionsTotal2\x80\x04\n" +
+	"\x0fevictions_total\x18\x06 \x01(\x03R\x0eevictionsTotal2\xd5\x02\n" +
 	"\vRuneService\x123\n" +
 	"\x04Ping\x12\x14.rune.v1.PingRequest\x1a\x15.rune.v1.PingResponse\x122\n" +
 	"\x03Get\x12\x13.rune.v1.GetRequest\x1a\x14.rune.v1.GetResponse0\x01\x122\n" +
 	"\x03Set\x12\x13.rune.v1.SetRequest\x1a\x14.rune.v1.SetResponse(\x01\x129\n" +
 	"\x06Delete\x12\x16.rune.v1.DeleteRequest\x1a\x17.rune.v1.DeleteResponse\x129\n" +
-	"\x06Exists\x12\x16.rune.v1.ExistsRequest\x1a\x17.rune.v1.ExistsResponse\x129\n" +
-	"\x06Expire\x12\x16.rune.v1.ExpireRequest\x1a\x17.rune.v1.ExpireResponse\x120\n" +
-	"\x03TTL\x12\x13.rune.v1.TTLRequest\x1a\x14.rune.v1.TTLResponse\x12<\n" +
-	"\aPersist\x12\x17.rune.v1.PersistRequest\x1a\x18.rune.v1.PersistResponse\x123\n" +
+	"\x06Exists\x12\x16.rune.v1.ExistsRequest\x1a\x17.rune.v1.ExistsResponse\x123\n" +
 	"\x04Info\x12\x14.rune.v1.InfoRequest\x1a\x15.rune.v1.InfoResponseB.Z,github.com/bryandguy/rune/gen/rune/v1;runev1b\x06proto3"
 
 var (
@@ -1007,27 +715,21 @@ func file_rune_v1_rune_proto_rawDescGZIP() []byte {
 	return file_rune_v1_rune_proto_rawDescData
 }
 
-var file_rune_v1_rune_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_rune_v1_rune_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_rune_v1_rune_proto_goTypes = []any{
-	(*PingRequest)(nil),     // 0: rune.v1.PingRequest
-	(*PingResponse)(nil),    // 1: rune.v1.PingResponse
-	(*GetRequest)(nil),      // 2: rune.v1.GetRequest
-	(*GetResponse)(nil),     // 3: rune.v1.GetResponse
-	(*SetRequest)(nil),      // 4: rune.v1.SetRequest
-	(*SetHeader)(nil),       // 5: rune.v1.SetHeader
-	(*SetResponse)(nil),     // 6: rune.v1.SetResponse
-	(*DeleteRequest)(nil),   // 7: rune.v1.DeleteRequest
-	(*DeleteResponse)(nil),  // 8: rune.v1.DeleteResponse
-	(*ExistsRequest)(nil),   // 9: rune.v1.ExistsRequest
-	(*ExistsResponse)(nil),  // 10: rune.v1.ExistsResponse
-	(*ExpireRequest)(nil),   // 11: rune.v1.ExpireRequest
-	(*ExpireResponse)(nil),  // 12: rune.v1.ExpireResponse
-	(*TTLRequest)(nil),      // 13: rune.v1.TTLRequest
-	(*TTLResponse)(nil),     // 14: rune.v1.TTLResponse
-	(*PersistRequest)(nil),  // 15: rune.v1.PersistRequest
-	(*PersistResponse)(nil), // 16: rune.v1.PersistResponse
-	(*InfoRequest)(nil),     // 17: rune.v1.InfoRequest
-	(*InfoResponse)(nil),    // 18: rune.v1.InfoResponse
+	(*PingRequest)(nil),    // 0: rune.v1.PingRequest
+	(*PingResponse)(nil),   // 1: rune.v1.PingResponse
+	(*GetRequest)(nil),     // 2: rune.v1.GetRequest
+	(*GetResponse)(nil),    // 3: rune.v1.GetResponse
+	(*SetRequest)(nil),     // 4: rune.v1.SetRequest
+	(*SetHeader)(nil),      // 5: rune.v1.SetHeader
+	(*SetResponse)(nil),    // 6: rune.v1.SetResponse
+	(*DeleteRequest)(nil),  // 7: rune.v1.DeleteRequest
+	(*DeleteResponse)(nil), // 8: rune.v1.DeleteResponse
+	(*ExistsRequest)(nil),  // 9: rune.v1.ExistsRequest
+	(*ExistsResponse)(nil), // 10: rune.v1.ExistsResponse
+	(*InfoRequest)(nil),    // 11: rune.v1.InfoRequest
+	(*InfoResponse)(nil),   // 12: rune.v1.InfoResponse
 }
 var file_rune_v1_rune_proto_depIdxs = []int32{
 	5,  // 0: rune.v1.SetRequest.header:type_name -> rune.v1.SetHeader
@@ -1036,21 +738,15 @@ var file_rune_v1_rune_proto_depIdxs = []int32{
 	4,  // 3: rune.v1.RuneService.Set:input_type -> rune.v1.SetRequest
 	7,  // 4: rune.v1.RuneService.Delete:input_type -> rune.v1.DeleteRequest
 	9,  // 5: rune.v1.RuneService.Exists:input_type -> rune.v1.ExistsRequest
-	11, // 6: rune.v1.RuneService.Expire:input_type -> rune.v1.ExpireRequest
-	13, // 7: rune.v1.RuneService.TTL:input_type -> rune.v1.TTLRequest
-	15, // 8: rune.v1.RuneService.Persist:input_type -> rune.v1.PersistRequest
-	17, // 9: rune.v1.RuneService.Info:input_type -> rune.v1.InfoRequest
-	1,  // 10: rune.v1.RuneService.Ping:output_type -> rune.v1.PingResponse
-	3,  // 11: rune.v1.RuneService.Get:output_type -> rune.v1.GetResponse
-	6,  // 12: rune.v1.RuneService.Set:output_type -> rune.v1.SetResponse
-	8,  // 13: rune.v1.RuneService.Delete:output_type -> rune.v1.DeleteResponse
-	10, // 14: rune.v1.RuneService.Exists:output_type -> rune.v1.ExistsResponse
-	12, // 15: rune.v1.RuneService.Expire:output_type -> rune.v1.ExpireResponse
-	14, // 16: rune.v1.RuneService.TTL:output_type -> rune.v1.TTLResponse
-	16, // 17: rune.v1.RuneService.Persist:output_type -> rune.v1.PersistResponse
-	18, // 18: rune.v1.RuneService.Info:output_type -> rune.v1.InfoResponse
-	10, // [10:19] is the sub-list for method output_type
-	1,  // [1:10] is the sub-list for method input_type
+	11, // 6: rune.v1.RuneService.Info:input_type -> rune.v1.InfoRequest
+	1,  // 7: rune.v1.RuneService.Ping:output_type -> rune.v1.PingResponse
+	3,  // 8: rune.v1.RuneService.Get:output_type -> rune.v1.GetResponse
+	6,  // 9: rune.v1.RuneService.Set:output_type -> rune.v1.SetResponse
+	8,  // 10: rune.v1.RuneService.Delete:output_type -> rune.v1.DeleteResponse
+	10, // 11: rune.v1.RuneService.Exists:output_type -> rune.v1.ExistsResponse
+	12, // 12: rune.v1.RuneService.Info:output_type -> rune.v1.InfoResponse
+	7,  // [7:13] is the sub-list for method output_type
+	1,  // [1:7] is the sub-list for method input_type
 	1,  // [1:1] is the sub-list for extension type_name
 	1,  // [1:1] is the sub-list for extension extendee
 	0,  // [0:1] is the sub-list for field type_name
@@ -1071,7 +767,7 @@ func file_rune_v1_rune_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_rune_v1_rune_proto_rawDesc), len(file_rune_v1_rune_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   19,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

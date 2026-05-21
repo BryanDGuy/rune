@@ -48,7 +48,9 @@ The SDK is cluster-aware — it caches the hash ring locally and connects direct
 
 ### 1. gRPC Server
 
-Accepts gRPC connections over HTTP/2. All value transfers use server-streaming RPCs so large blobs are chunked off disk and streamed to the client — no full in-memory buffering required.
+Accepts gRPC connections over HTTP/2. All value transfers use streaming RPCs — the client receives a `Reader` and can begin processing before the full value arrives, so the **client** never needs to buffer the full value in memory.
+
+The **server** does hold each value fully in RAM during a Get or Set. This is an inherent constraint of BadgerDB: its `Item.Value()` API delivers the full blob in memory with no streaming read path from the value log. Provision nodes with enough RAM for `max_concurrent_ops × typical_value_size`. For example, 10 concurrent reads of 500MB documents requires ~5GB of headroom for reads alone.
 
 The client streams values in chunks of **1MB by default** (configurable via `RUNE_STREAM_CHUNK_SIZE`). The server accumulates chunks and writes to BadgerDB in one operation. Below 64KB, gRPC framing overhead dominates. Above 4MB, memory pressure increases without meaningful throughput gains on reads.
 
@@ -61,9 +63,6 @@ The client streams values in chunks of **1MB by default** (configurable via `RUN
 | `Set` | Client-streaming: caller streams value chunks to server |
 | `Delete` | Delete one or more keys |
 | `Exists` | Check key existence |
-| `Expire` | Set TTL in seconds |
-| `TTL` | Get remaining TTL |
-| `Persist` | Remove TTL from key |
 | `Keys` | Server-streaming: stream keys matching a pattern |
 | `Scan` | Cursor-based key iteration |
 | `MGet` | Bulk fetch (streaming per value) |
@@ -86,6 +85,10 @@ Additional language SDKs (Python, Node, Rust) follow the same pattern via genera
 ### 2. Router
 
 Determines key ownership using consistent hashing. Default replication factor: 2 (configurable).
+
+**Node identity:** Each node carries a stable `ID` (used for ring placement) and an `Addr` (host:port used for dialing). These are kept separate so a node can change its network address (e.g., pod restart with a new IP) without shifting its position on the hash ring and triggering unnecessary key remapping.
+
+**Virtual nodes:** The ring uses 20 virtual nodes (vnodes) per physical node (`ReplicationFactor: 20` in `buraksezer/consistent`) across 271 partitions (`PartitionCount: 271`, a prime). Without vnodes, a small cluster (3–5 nodes) produces uneven ring slices and skewed load. 20 vnodes per node provides uniform distribution without meaningful memory overhead.
 
 Replication exists purely for **availability** — if one node goes down, the key is still readable from the second replica without a cache miss. Rune makes no durability guarantees; the source of truth always lives outside Rune (S3, database, etc.). A cache miss is an expected and acceptable failure mode.
 
@@ -113,6 +116,8 @@ This approach is safe for a cache because:
 ### 3. Storage Engine
 
 BadgerDB embedded in each Rune process. BadgerDB's WiscKey-inspired design stores keys in an LSM tree and values in a separate append-only value log — this avoids write amplification for large values and scales to arbitrary value sizes bounded only by disk.
+
+**TTL updates re-read the full value.** `Expire` and `Persist` must read the blob out of BadgerDB and write it back with updated metadata — there is no API to update TTL in place. On large values this is an expensive operation; callers should treat TTL updates as a full read+write cycle in their cost model.
 
 **Eviction:** TTL (optional, caller-set) + weighted score eviction under storage pressure. See Eviction Details section.
 
@@ -187,7 +192,6 @@ Configuration via environment variables. Key settings:
 | `RUNE_STREAM_CHUNK_SIZE`     | `1048576`        |
 | `RUNE_GC_INTERVAL`           | `10m`            |
 | `RUNE_GC_DISCARD_RATIO`      | `0.5`            |
-| `RUNE_TTL_SWEEP_INTERVAL`    | `60s`            |
 
 Cluster-mode settings (etcd endpoints, replication factor) are roadmap items — not yet implemented.
 

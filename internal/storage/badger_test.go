@@ -20,7 +20,6 @@ func baseStorageTestConfig(t *testing.T) *config.Config {
 		EvictionAgeWeight:  1.0,
 		GCInterval:         time.Hour,
 		GCDiscardRatio:     0.5,
-		TTLSweepInterval:   time.Hour,
 	}
 }
 
@@ -68,54 +67,6 @@ func TestBadgerExists(t *testing.T) {
 	n, err := s.Exists("k1", "missing")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), n)
-}
-
-func TestBadgerTTL(t *testing.T) {
-	s := newTestStore(t)
-
-	ttl, err := s.TTL("missing")
-	require.NoError(t, err)
-	assert.Equal(t, int64(-2), ttl)
-
-	require.NoError(t, s.Set("k1", []byte("v"), 0))
-	ttl, err = s.TTL("k1")
-	require.NoError(t, err)
-	assert.Equal(t, int64(-1), ttl)
-
-	require.NoError(t, s.Set("k2", []byte("v"), 60))
-	ttl, err = s.TTL("k2")
-	require.NoError(t, err)
-	assert.InDelta(t, int64(60), ttl, 2)
-}
-
-func TestBadgerExpire(t *testing.T) {
-	s := newTestStore(t)
-	require.NoError(t, s.Set("k1", []byte("v"), 0))
-
-	ok, err := s.Expire("k1", 120)
-	require.NoError(t, err)
-	assert.True(t, ok)
-
-	ttl, err := s.TTL("k1")
-	require.NoError(t, err)
-	assert.InDelta(t, int64(120), ttl, 2)
-
-	ok, err = s.Expire("missing", 120)
-	require.NoError(t, err)
-	assert.False(t, ok)
-}
-
-func TestBadgerPersist(t *testing.T) {
-	s := newTestStore(t)
-	require.NoError(t, s.Set("k1", []byte("v"), 60))
-
-	ok, err := s.Persist("k1")
-	require.NoError(t, err)
-	assert.True(t, ok)
-
-	ttl, err := s.TTL("k1")
-	require.NoError(t, err)
-	assert.Equal(t, int64(-1), ttl)
 }
 
 func TestBadgerInfo(t *testing.T) {

@@ -4,18 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/bryandguy/rune/internal/config"
 	badger "github.com/dgraph-io/badger/v4"
-)
-
-const (
-	ttlNoExpiry = int64(-1) // key exists with no expiration
-	ttlNotFound = int64(-2) // key does not exist
 )
 
 type BadgerStore struct {
@@ -145,76 +139,6 @@ func (s *BadgerStore) Exists(keys ...string) (int64, error) {
 	return count, err
 }
 
-func (s *BadgerStore) Expire(key string, ttlSeconds int64) (bool, error) {
-	var found bool
-	err := s.db.Update(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(key))
-		if errors.Is(err, badger.ErrKeyNotFound) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		found = true
-		return item.Value(func(val []byte) error {
-			entry := badger.NewEntry([]byte(key), val).
-				WithTTL(time.Duration(ttlSeconds) * time.Second)
-			return txn.SetEntry(entry)
-		})
-	})
-	return found, err
-}
-
-func (s *BadgerStore) TTL(key string) (int64, error) {
-	var ttlSecs int64
-	err := s.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(key))
-		if errors.Is(err, badger.ErrKeyNotFound) {
-			ttlSecs = ttlNotFound
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		expiresAt := item.ExpiresAt()
-		if expiresAt == 0 {
-			ttlSecs = ttlNoExpiry
-			return nil
-		}
-		if expiresAt > math.MaxInt64 {
-			ttlSecs = ttlNoExpiry
-			return nil
-		}
-		remaining := time.Until(time.Unix(int64(expiresAt), 0))
-		if remaining <= 0 {
-			// Key has expired but BadgerDB hasn't reaped it yet — treat as not found.
-			ttlSecs = ttlNotFound
-			return nil
-		}
-		ttlSecs = int64(remaining.Seconds())
-		return nil
-	})
-	return ttlSecs, err
-}
-
-func (s *BadgerStore) Persist(key string) (bool, error) {
-	var found bool
-	err := s.db.Update(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(key))
-		if errors.Is(err, badger.ErrKeyNotFound) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		found = true
-		return item.Value(func(val []byte) error {
-			return txn.Set([]byte(key), val)
-		})
-	})
-	return found, err
-}
-
 func (s *BadgerStore) Info() (Info, error) {
 	lsm, vlog := s.db.Size()
 	return Info{
@@ -240,10 +164,7 @@ func (s *BadgerStore) initEvictionIndex() error {
 	})
 }
 
-// runGC runs one GC pass against the value log. If a pass is already in
-// progress the call returns immediately (concurrency guard via gcRunning).
-// The loop calls RunValueLogGC until BadgerDB signals ErrNoRewrite, meaning
-// there is nothing left to compact.
+// Concurrent calls return immediately — only one GC pass runs at a time.
 func (s *BadgerStore) runGC(ctx context.Context) {
 	if !s.gcRunning.CompareAndSwap(false, true) {
 		return
@@ -261,12 +182,6 @@ func (s *BadgerStore) runGC(ctx context.Context) {
 	}
 }
 
-// maintenanceLoop is the background goroutine started by NewBadgerStore.
-// It drives two triggers:
-//   - heartbeat ticker (cfg.GCInterval) — safety-net, always runs GC.
-//   - pressure ticker (cfg.GCInterval/10 or 30 s, whichever is smaller) —
-//     checks storage utilization and triggers GC when above the eviction
-//     threshold.
 func (s *BadgerStore) maintenanceLoop(ctx context.Context) {
 	heartbeat := time.NewTicker(s.cfg.GCInterval)
 	defer heartbeat.Stop()

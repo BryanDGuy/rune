@@ -15,27 +15,22 @@ import (
 
 const chunkSize = 1 << 20 // 1MB
 
-// ErrNotFound is returned by Get when the key does not exist.
 var ErrNotFound = errors.New("key not found")
 
-// SetOptions configures a Set call. Pass nil for defaults.
 type SetOptions struct {
 	TTL time.Duration
 }
 
-// Client is a Rune cache client.
 type Client struct {
 	conn *grpc.ClientConn
 	grpc runev1.RuneServiceClient
 }
 
-// NewClient creates a Client from an existing gRPC connection.
 func NewClient(conn *grpc.ClientConn) *Client {
 	return &Client{conn: conn, grpc: runev1.NewRuneServiceClient(conn)}
 }
 
-// Set writes the value from r to the cache at key.
-// The value is chunked and sent via client-streaming gRPC in 1MB pieces.
+// Chunked via client-streaming gRPC in 1MB pieces.
 func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts *SetOptions) error {
 	var ttl time.Duration
 	if opts != nil {
@@ -80,9 +75,7 @@ func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts *SetOpti
 	return err
 }
 
-// Get retrieves a key from the cache and returns a streaming io.ReadCloser.
-// The caller must Close() the reader when done.
-// Returns ErrNotFound if the key does not exist.
+// Caller must Close() the reader when done. Returns ErrNotFound if key is missing.
 func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	stream, err := c.grpc.Get(ctx, &runev1.GetRequest{Key: key})
@@ -110,7 +103,6 @@ func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	return &streamReader{stream: stream, buf: resp.Chunk, cancel: cancel}, nil
 }
 
-// Close closes the underlying gRPC connection.
 func (c *Client) Close() error {
 	if c.conn != nil {
 		return c.conn.Close()

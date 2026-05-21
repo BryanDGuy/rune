@@ -91,33 +91,6 @@ func (h *handler) Exists(_ context.Context, req *runev1.ExistsRequest) (*runev1.
 	return &runev1.ExistsResponse{Count: n}, nil
 }
 
-func (h *handler) Expire(_ context.Context, req *runev1.ExpireRequest) (*runev1.ExpireResponse, error) {
-	if req.TtlSeconds <= 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "ttl_seconds must be positive, got %d", req.TtlSeconds)
-	}
-	ok, err := h.srv.store.Expire(req.Key, req.TtlSeconds)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "expire: %v", err)
-	}
-	return &runev1.ExpireResponse{Ok: ok}, nil
-}
-
-func (h *handler) TTL(_ context.Context, req *runev1.TTLRequest) (*runev1.TTLResponse, error) {
-	ttl, err := h.srv.store.TTL(req.Key)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "ttl: %v", err)
-	}
-	return &runev1.TTLResponse{TtlSeconds: ttl}, nil
-}
-
-func (h *handler) Persist(_ context.Context, req *runev1.PersistRequest) (*runev1.PersistResponse, error) {
-	ok, err := h.srv.store.Persist(req.Key)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "persist: %v", err)
-	}
-	return &runev1.PersistResponse{Ok: ok}, nil
-}
-
 func (h *handler) Info(_ context.Context, _ *runev1.InfoRequest) (*runev1.InfoResponse, error) {
 	info, err := h.srv.store.Info()
 	if err != nil {
