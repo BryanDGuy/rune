@@ -128,15 +128,9 @@ func (m *Membership) populate(ctx context.Context) error {
 }
 
 func (m *Membership) watchLoop(ctx context.Context) {
-	wch := m.store.Watch(ctx, nodePrefix, clientv3.WithPrefix())
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		case wresp, ok := <-wch:
-			if !ok {
-				return
-			}
+		wch := m.store.Watch(ctx, nodePrefix, clientv3.WithPrefix())
+		for wresp := range wch {
 			for _, ev := range wresp.Events {
 				switch ev.Type {
 				case mvccpb.PUT:
@@ -146,6 +140,16 @@ func (m *Membership) watchLoop(ctx context.Context) {
 					m.ring.Remove(nodeID)
 				}
 			}
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		// Watch channel closed unexpectedly — resync ring state before reconnecting.
+		_ = m.populate(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Second):
 		}
 	}
 }
@@ -166,7 +170,6 @@ func (m *Membership) NodeID() string {
 	return m.nodeID
 }
 
-// Stop cancels the watch, waits for goroutines to exit, then revokes the lease.
 func (m *Membership) Stop() {
 	if m.cancel != nil {
 		m.cancel()

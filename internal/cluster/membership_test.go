@@ -45,8 +45,23 @@ func (f *fakeStore) Get(_ context.Context, key string, _ ...clientv3.OpOption) (
 	return resp, nil
 }
 
-func (f *fakeStore) Watch(_ context.Context, _ string, _ ...clientv3.OpOption) clientv3.WatchChan {
-	return f.watchC
+func (f *fakeStore) Watch(ctx context.Context, _ string, _ ...clientv3.OpOption) clientv3.WatchChan {
+	ch := make(chan clientv3.WatchResponse, 16)
+	go func() {
+		defer close(ch)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case resp, ok := <-f.watchC:
+				if !ok {
+					return
+				}
+				ch <- resp
+			}
+		}
+	}()
+	return ch
 }
 
 func (f *fakeStore) Grant(_ context.Context, _ int64) (*clientv3.LeaseGrantResponse, error) {
