@@ -186,6 +186,75 @@ func TestInfo(t *testing.T) {
 	assert.GreaterOrEqual(t, info.ActiveConnections, int64(0))
 }
 
+func TestForwardingGet(t *testing.T) {
+	// Start the "owning" node (node-2) and write a value to it.
+	conn2, cleanup2 := testutil.NewBufconnConn(t, bufSize)
+	defer cleanup2()
+
+	rawClient2 := runev1.NewRuneServiceClient(conn2)
+	stream, err := rawClient2.Set(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, stream.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Header{Header: &runev1.SetHeader{Key: "fwd-key"}}}))
+	require.NoError(t, stream.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Chunk{Chunk: []byte("hello-from-node2")}}))
+	_, err = stream.CloseAndRecv()
+	require.NoError(t, err)
+
+	// Start a forwarding node (node-1) that routes all keys to node-2.
+	conn1, cleanup1 := testutil.NewBufconnConnWithForwarding(t, bufSize, conn2)
+	defer cleanup1()
+
+	// Get via node-1 should be forwarded to node-2.
+	client := runev1.NewRuneServiceClient(conn1)
+	getStream, err := client.Get(context.Background(), &runev1.GetRequest{Key: "fwd-key"})
+	require.NoError(t, err)
+
+	var got []byte
+	for {
+		resp, err := getStream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		got = append(got, resp.Chunk...)
+	}
+	assert.Equal(t, []byte("hello-from-node2"), got)
+}
+
+func TestForwardingSet(t *testing.T) {
+	// The "owning" node.
+	conn2, cleanup2 := testutil.NewBufconnConn(t, bufSize)
+	defer cleanup2()
+
+	// The forwarding node.
+	conn1, cleanup1 := testutil.NewBufconnConnWithForwarding(t, bufSize, conn2)
+	defer cleanup1()
+
+	// Set via node-1 — should be forwarded to node-2.
+	client1 := runev1.NewRuneServiceClient(conn1)
+	setStream, err := client1.Set(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, setStream.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Header{Header: &runev1.SetHeader{Key: "set-fwd-key"}}}))
+	require.NoError(t, setStream.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Chunk{Chunk: []byte("written-via-node1")}}))
+	_, err = setStream.CloseAndRecv()
+	require.NoError(t, err)
+
+	// Read from node-2 directly — should find the value.
+	client2 := runev1.NewRuneServiceClient(conn2)
+	getStream, err := client2.Get(context.Background(), &runev1.GetRequest{Key: "set-fwd-key"})
+	require.NoError(t, err)
+
+	var got []byte
+	for {
+		resp, err := getStream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		got = append(got, resp.Chunk...)
+	}
+	assert.Equal(t, []byte("written-via-node1"), got)
+}
+
 func TestLargePayload(t *testing.T) {
 	client, cleanup := newTestClient(t)
 	defer cleanup()

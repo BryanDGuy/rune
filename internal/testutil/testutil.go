@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bryandguy/rune/internal/cluster"
 	"github.com/bryandguy/rune/internal/config"
 	"github.com/bryandguy/rune/internal/server"
 	"github.com/bryandguy/rune/internal/storage"
@@ -52,5 +53,39 @@ func NewBufconnConn(t *testing.T, bufSize int) (*grpc.ClientConn, func()) {
 		srv.Stop()
 		_ = conn.Close()
 		_ = store.Close()
+	}
+}
+
+// NewBufconnConnWithForwarding starts a server that forwards all key requests to
+// peerConn. The ring contains only the peer node, so every key routes to it.
+func NewBufconnConnWithForwarding(t *testing.T, bufSize int, peerConn *grpc.ClientConn) (*grpc.ClientConn, func()) {
+	t.Helper()
+	cfg := BaseConfig(t)
+	store, err := storage.NewBadgerStore(cfg)
+	require.NoError(t, err)
+
+	dialer := cluster.NewPeerDialer()
+	peerAddr := peerConn.Target()
+	membership := newFakeMembership("node-self", "node-peer", peerAddr)
+	dialer.DialWith(peerAddr, peerConn)
+
+	lis := bufconn.Listen(bufSize)
+	srv := server.NewCluster(cfg, store, membership, dialer)
+	srv.StartOnListener(lis)
+
+	conn, err := grpc.NewClient(
+		"passthrough://bufnet",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return lis.DialContext(ctx)
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+
+	return conn, func() {
+		srv.Stop()
+		_ = conn.Close()
+		_ = store.Close()
+		dialer.Close()
 	}
 }

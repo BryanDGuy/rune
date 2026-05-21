@@ -55,6 +55,13 @@ func (d *PeerDialer) Dial(addr string, extraOpts ...grpc.DialOption) (*grpc.Clie
 	return conn, nil
 }
 
+// DialWith registers a pre-existing connection for addr, used in tests.
+func (d *PeerDialer) DialWith(addr string, conn *grpc.ClientConn) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.conns[addr] = conn
+}
+
 // Close closes all pooled connections.
 func (d *PeerDialer) Close() {
 	d.mu.Lock()
