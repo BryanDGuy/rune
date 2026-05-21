@@ -85,10 +85,7 @@ func (r *Router) LookupN(key string, n int) ([]Node, error) {
 		return nil, ErrNoNodes
 	}
 
-	count := n
-	if count > len(r.nodes) {
-		count = len(r.nodes)
-	}
+	count := min(n, len(r.nodes))
 
 	// ErrInsufficientMemberCount from the library is unreachable here:
 	// count was capped to len(r.nodes) which is kept in sync with the

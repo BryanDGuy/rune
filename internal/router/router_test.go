@@ -66,7 +66,7 @@ func TestRemoveExcludesNode(t *testing.T) {
 	r.Add(Node{ID: "node-2", Addr: "host2:7946"})
 	r.Remove("node-1")
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		got, err := r.Lookup(fmt.Sprintf("key-%d", i))
 		require.NoError(t, err)
 		assert.NotEqual(t, "node-1", got.ID, "removed node should never be returned")
@@ -81,7 +81,7 @@ func TestStabilityOnNodeRemoval(t *testing.T) {
 
 	// Record initial key→node mapping for 1000 keys.
 	before := make(map[string]string)
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		key := fmt.Sprintf("key-%d", i)
 		n, err := r.Lookup(key)
 		require.NoError(t, err)
@@ -92,7 +92,7 @@ func TestStabilityOnNodeRemoval(t *testing.T) {
 
 	// Only keys previously owned by node-3 should remap.
 	remapped := 0
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		key := fmt.Sprintf("key-%d", i)
 		n, err := r.Lookup(key)
 		require.NoError(t, err)
@@ -114,7 +114,7 @@ func TestDistribution(t *testing.T) {
 
 	counts := make(map[string]int)
 	const total = 10000
-	for i := 0; i < total; i++ {
+	for i := range total {
 		n, err := r.Lookup(fmt.Sprintf("key-%d", i))
 		require.NoError(t, err)
 		counts[n.ID]++
