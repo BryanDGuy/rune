@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	nodePrefix = "/rune/nodes/"
-	leaseTTL   = 10 // seconds
+	nodePrefix      = "/rune/nodes/"
+	leaseTTLSeconds = 10
 )
 
 // NodeInfo is the value stored in etcd for each registered node.
@@ -47,10 +47,10 @@ type MembershipIface interface {
 type Membership struct {
 	store    memberStore
 	ring     *router.Router
+	cancel   context.CancelFunc
 	nodeID   string
 	nodeAddr string
 	leaseID  clientv3.LeaseID
-	cancel   context.CancelFunc
 	wg       sync.WaitGroup
 }
 
@@ -85,13 +85,12 @@ func (m *Membership) Start(ctx context.Context) error {
 		return fmt.Errorf("populate ring: %w", err)
 	}
 
-	m.wg.Add(1)
-	go m.watchLoop(ctx)
+	m.wg.Go(func() { m.watchLoop(ctx) })
 	return nil
 }
 
 func (m *Membership) register(ctx context.Context) error {
-	resp, err := m.store.Grant(ctx, leaseTTL)
+	resp, err := m.store.Grant(ctx, leaseTTLSeconds)
 	if err != nil {
 		return err
 	}
@@ -109,12 +108,10 @@ func (m *Membership) register(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
-		for range kaCh {
+	m.wg.Go(func() {
+		for range kaCh { //nolint:revive // drain to prevent the etcd keepalive sender from blocking
 		}
-	}()
+	})
 	return nil
 }
 
@@ -130,7 +127,6 @@ func (m *Membership) populate(ctx context.Context) error {
 }
 
 func (m *Membership) watchLoop(ctx context.Context) {
-	defer m.wg.Done()
 	wch := m.store.Watch(ctx, nodePrefix, clientv3.WithPrefix())
 	for {
 		select {

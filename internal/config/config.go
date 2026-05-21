@@ -11,18 +11,18 @@ import (
 type Config struct {
 	LogLevel           string
 	DataDir            string
-	MaxStorageBytes    int64
+	NodeID             string
+	NodeAddr           string
+	EtcdEndpoints      []string
 	EvictionThreshold  float64
+	MaxStorageBytes    int64
 	EvictionSizeWeight float64
 	EvictionAgeWeight  float64
+	GCInterval         time.Duration
+	GCDiscardRatio     float64
 	Port               int
 	MetricsPort        int
 	StreamChunkSize    int
-	GCInterval         time.Duration
-	GCDiscardRatio     float64
-	EtcdEndpoints      []string
-	NodeID             string
-	NodeAddr           string
 }
 
 // LoadConfig builds a Config from environment variables, falling back to defaults.

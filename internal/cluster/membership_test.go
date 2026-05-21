@@ -30,12 +30,12 @@ func newFakeStore() *fakeStore {
 	}
 }
 
-func (f *fakeStore) Put(ctx context.Context, key, val string, opts ...clientv3.OpOption) (*clientv3.PutResponse, error) {
+func (f *fakeStore) Put(_ context.Context, key, val string, _ ...clientv3.OpOption) (*clientv3.PutResponse, error) {
 	f.kvs[key] = val
 	return &clientv3.PutResponse{}, nil
 }
 
-func (f *fakeStore) Get(ctx context.Context, key string, opts ...clientv3.OpOption) (*clientv3.GetResponse, error) {
+func (f *fakeStore) Get(_ context.Context, key string, _ ...clientv3.OpOption) (*clientv3.GetResponse, error) {
 	resp := &clientv3.GetResponse{}
 	for k, v := range f.kvs {
 		if strings.HasPrefix(k, key) {
@@ -45,18 +45,18 @@ func (f *fakeStore) Get(ctx context.Context, key string, opts ...clientv3.OpOpti
 	return resp, nil
 }
 
-func (f *fakeStore) Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan {
+func (f *fakeStore) Watch(_ context.Context, _ string, _ ...clientv3.OpOption) clientv3.WatchChan {
 	return f.watchC
 }
 
-func (f *fakeStore) Grant(ctx context.Context, ttl int64) (*clientv3.LeaseGrantResponse, error) {
+func (f *fakeStore) Grant(_ context.Context, _ int64) (*clientv3.LeaseGrantResponse, error) {
 	id := f.nextID
 	f.nextID++
 	f.leases[id] = true
 	return &clientv3.LeaseGrantResponse{ID: id}, nil
 }
 
-func (f *fakeStore) KeepAlive(ctx context.Context, id clientv3.LeaseID) (<-chan *clientv3.LeaseKeepAliveResponse, error) {
+func (f *fakeStore) KeepAlive(ctx context.Context, _ clientv3.LeaseID) (<-chan *clientv3.LeaseKeepAliveResponse, error) {
 	ch := make(chan *clientv3.LeaseKeepAliveResponse)
 	go func() {
 		<-ctx.Done()
@@ -65,7 +65,7 @@ func (f *fakeStore) KeepAlive(ctx context.Context, id clientv3.LeaseID) (<-chan 
 	return ch, nil
 }
 
-func (f *fakeStore) Revoke(ctx context.Context, id clientv3.LeaseID) (*clientv3.LeaseRevokeResponse, error) {
+func (f *fakeStore) Revoke(_ context.Context, id clientv3.LeaseID) (*clientv3.LeaseRevokeResponse, error) {
 	delete(f.leases, id)
 	return &clientv3.LeaseRevokeResponse{}, nil
 }
@@ -82,8 +82,7 @@ func (f *fakeStore) simulateNodeLeave(nodeID string) {
 func TestMembershipRegistersOnStart(t *testing.T) {
 	store := newFakeStore()
 	m := newWithStore(store, "node-1", "host1:7946")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	require.NoError(t, m.Start(ctx))
 	defer m.Stop()
@@ -101,8 +100,7 @@ func TestMembershipWatchOnlyMode(t *testing.T) {
 
 	// nodeAddr="" means watch-only (SDK mode).
 	m := newWithStore(store, "", "")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	require.NoError(t, m.Start(ctx))
 	defer m.Stop()
@@ -118,8 +116,7 @@ func TestMembershipWatchOnlyMode(t *testing.T) {
 func TestMembershipRingUpdatesOnNodeJoin(t *testing.T) {
 	store := newFakeStore()
 	m := newWithStore(store, "node-1", "host1:7946")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	require.NoError(t, m.Start(ctx))
 	defer m.Stop()
@@ -142,8 +139,7 @@ func TestMembershipRingUpdatesOnNodeLeave(t *testing.T) {
 	store.kvs[nodePrefix+"node-2"] = string(info)
 
 	m := newWithStore(store, "node-1", "host1:7946")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	require.NoError(t, m.Start(ctx))
 	defer m.Stop()
@@ -164,7 +160,7 @@ func TestMembershipRingUpdatesOnNodeLeave(t *testing.T) {
 func TestMembershipStopRevokesLease(t *testing.T) {
 	store := newFakeStore()
 	m := newWithStore(store, "node-1", "host1:7946")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	require.NoError(t, m.Start(ctx))
 	assert.Len(t, store.leases, 1)
