@@ -10,6 +10,8 @@ import (
 	"github.com/bryandguy/rune/internal/cluster"
 	"github.com/bryandguy/rune/internal/router"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var ErrNoNodes = errors.New("cluster: no nodes in ring")
@@ -19,8 +21,17 @@ type ClusterClient struct {
 	membership cluster.MembershipIface
 	ring       *router.Router
 	clients    map[string]*Client
+	dialFn     func(addr string) (*Client, error) // nil in static-ring (test) mode
 	mu         sync.RWMutex
 	closed     bool
+}
+
+func defaultDial(addr string) (*Client, error) {
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, fmt.Errorf("dial %s: %w", addr, err)
+	}
+	return NewClient(conn), nil
 }
 
 // NewClusterClient creates a ClusterClient backed by a live etcd watch.
@@ -34,6 +45,7 @@ func NewClusterClient(etcdClient *clientv3.Client, nodeID string) (*ClusterClien
 		membership: m,
 		ring:       m.Ring(),
 		clients:    make(map[string]*Client),
+		dialFn:     defaultDial,
 	}, nil
 }
 
@@ -70,9 +82,25 @@ func (c *ClusterClient) clientFor(key string) (*Client, error) {
 		return client, nil
 	}
 
-	// No pre-built client for this address. In production this can occur when a
-	// node joins after construction; the caller should retry or rebuild the client map.
-	return nil, fmt.Errorf("cluster: no client for node %s (%s)", node.ID, node.Addr)
+	if c.dialFn == nil {
+		return nil, fmt.Errorf("cluster: no client for node %s (%s)", node.ID, node.Addr)
+	}
+
+	// Dial a new connection. Use write lock for the insert.
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return nil, errors.New("cluster: ClusterClient is closed")
+	}
+	if client, ok = c.clients[node.Addr]; ok {
+		return client, nil
+	}
+	client, err = c.dialFn(node.Addr)
+	if err != nil {
+		return nil, err
+	}
+	c.clients[node.Addr] = client
+	return client, nil
 }
 
 func (c *ClusterClient) Set(ctx context.Context, key string, r io.Reader, opts *SetOptions) error {

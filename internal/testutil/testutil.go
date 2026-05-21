@@ -2,7 +2,9 @@ package testutil
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,6 +17,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 )
+
+var bufconnSeq atomic.Uint64
 
 func BaseConfig(t *testing.T) *config.Config {
 	t.Helper()
@@ -32,7 +36,8 @@ func BaseConfig(t *testing.T) *config.Config {
 
 // NewBufconnConn starts a Rune server over an in-process bufconn listener and
 // returns a dialed gRPC connection plus a cleanup function. bufSize controls
-// the in-memory buffer size.
+// the in-memory buffer size. Each call gets a unique target address so that
+// multiple connections within the same test can be distinguished by Target().
 func NewBufconnConn(t *testing.T, bufSize int) (*grpc.ClientConn, func()) {
 	t.Helper()
 	cfg := BaseConfig(t)
@@ -41,8 +46,9 @@ func NewBufconnConn(t *testing.T, bufSize int) (*grpc.ClientConn, func()) {
 	lis := bufconn.Listen(bufSize)
 	srv := server.New(cfg, store)
 	srv.StartOnListener(lis)
+	addr := fmt.Sprintf("passthrough://bufnet-%d", bufconnSeq.Add(1))
 	conn, err := grpc.NewClient(
-		"passthrough://bufnet",
+		addr,
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return lis.DialContext(ctx)
 		}),
@@ -74,7 +80,7 @@ func NewBufconnConnWithForwarding(t *testing.T, bufSize int, peerConn *grpc.Clie
 	srv.StartOnListener(lis)
 
 	conn, err := grpc.NewClient(
-		"passthrough://bufnet",
+		fmt.Sprintf("passthrough://bufnet-%d", bufconnSeq.Add(1)),
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return lis.DialContext(ctx)
 		}),

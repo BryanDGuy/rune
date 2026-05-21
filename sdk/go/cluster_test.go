@@ -38,21 +38,54 @@ func newTwoNodeCluster(t *testing.T) (*runesdk.ClusterClient, func()) {
 }
 
 func TestClusterClientRoutesSetAndGet(t *testing.T) {
-	c, cleanup := newTwoNodeCluster(t)
-	defer cleanup()
+	conn1, stop1 := testutil.NewBufconnConn(t, 1<<20)
+	conn2, stop2 := testutil.NewBufconnConn(t, 1<<20)
+	defer stop1()
+	defer stop2()
+
+	r := router.New()
+	r.Add(router.Node{ID: "node-1", Addr: conn1.Target()})
+	r.Add(router.Node{ID: "node-2", Addr: conn2.Target()})
+
+	client1 := runesdk.NewClient(conn1)
+	client2 := runesdk.NewClient(conn2)
+	nodeClients := map[string]*runesdk.Client{
+		conn1.Target(): client1,
+		conn2.Target(): client2,
+	}
+	c := runesdk.NewClusterClientFromRingAndClients(r, nodeClients)
+	defer c.Close()
 
 	ctx := context.Background()
 	data := []byte("cluster payload")
-	err := c.Set(ctx, "test-key", bytes.NewReader(data), nil)
+	const key = "test-routing-key"
+
+	err := c.Set(ctx, key, bytes.NewReader(data), nil)
 	require.NoError(t, err)
 
-	rc, err := c.Get(ctx, "test-key")
+	// Determine which node the ring assigns this key to.
+	owningNode, err := r.Lookup(key)
 	require.NoError(t, err)
-	defer rc.Close()
 
+	// The owning node should have the value; the other should not.
+	var owningClient, otherClient *runesdk.Client
+	if owningNode.Addr == conn1.Target() {
+		owningClient, otherClient = client1, client2
+	} else {
+		owningClient, otherClient = client2, client1
+	}
+
+	// Value present on owning node.
+	rc, err := owningClient.Get(ctx, key)
+	require.NoError(t, err)
 	got, err := io.ReadAll(rc)
 	require.NoError(t, err)
+	require.NoError(t, rc.Close())
 	assert.Equal(t, data, got)
+
+	// Value absent on the other node.
+	_, err = otherClient.Get(ctx, key)
+	require.ErrorIs(t, err, runesdk.ErrNotFound)
 }
 
 func TestClusterClientGetNotFound(t *testing.T) {
@@ -69,8 +102,7 @@ func TestClusterClientEmptyRingError(t *testing.T) {
 	defer c.Close()
 
 	_, err := c.Get(context.Background(), "any-key")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no nodes")
+	require.ErrorIs(t, err, runesdk.ErrNoNodes)
 }
 
 func TestClusterClientCloseStopsRouting(t *testing.T) {
