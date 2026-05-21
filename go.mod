@@ -3,7 +3,6 @@ module github.com/bryandguy/rune
 go 1.26
 
 require (
-	github.com/buraksezer/consistent v0.10.0
 	github.com/dgraph-io/badger/v4 v4.9.1
 	github.com/stretchr/testify v1.11.1
 	google.golang.org/grpc v1.81.1
