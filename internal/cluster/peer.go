@@ -55,11 +55,19 @@ func (d *PeerDialer) Dial(addr string, extraOpts ...grpc.DialOption) (*grpc.Clie
 	return conn, nil
 }
 
-// DialWith registers a pre-existing connection for addr, used in tests.
-func (d *PeerDialer) DialWith(addr string, conn *grpc.ClientConn) {
+// DialWith pre-populates the connection cache for addr without dialing.
+// Use this to inject test connections or pre-built clients.
+func (d *PeerDialer) DialWith(addr string, conn *grpc.ClientConn) error {
+	if conn == nil {
+		return errors.New("cluster: DialWith: conn must not be nil")
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if d.closed {
+		return errDialerClosed
+	}
 	d.conns[addr] = conn
+	return nil
 }
 
 // Close closes all pooled connections.

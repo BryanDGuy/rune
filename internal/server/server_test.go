@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -292,4 +293,25 @@ func TestLargePayload(t *testing.T) {
 	}
 	require.Len(t, got, size)
 	assert.Equal(t, payload, got)
+}
+
+func TestForwardingLoopPrevention(t *testing.T) {
+	// conn2 is the "owning" peer. conn1 is a forwarding server that routes
+	// all keys to conn2.
+	conn2, cleanup2 := testutil.NewBufconnConn(t, bufSize)
+	defer cleanup2()
+	conn1, cleanup1 := testutil.NewBufconnConnWithForwarding(t, bufSize, conn2)
+	defer cleanup1()
+
+	// A request with x-rune-forwarded must be served locally regardless of
+	// ring ownership — this prevents infinite forwarding loops.
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs("x-rune-forwarded", "1"))
+	client := runev1.NewRuneServiceClient(conn1)
+	stream, err := client.Get(ctx, &runev1.GetRequest{Key: "loop-key"})
+	require.NoError(t, err)
+
+	_, err = stream.Recv()
+	// Must return NotFound (served locally) — not forwarded to conn2.
+	require.Error(t, err)
+	assert.Equal(t, codes.NotFound, status.Code(err))
 }

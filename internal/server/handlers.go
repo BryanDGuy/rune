@@ -76,6 +76,7 @@ func (h *handler) forwardGet(ctx context.Context, peerAddr string, req *runev1.G
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "dial peer: %v", err)
 	}
+	// forwardCtx marks the outgoing request as already forwarded to prevent loops.
 	peerStream, err := runev1.NewRuneServiceClient(conn).Get(forwardCtx(ctx), req)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -140,6 +141,7 @@ func (h *handler) forwardSet(ctx context.Context, peerAddr string, hdr *runev1.S
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "dial peer: %v", err)
 	}
+	// forwardCtx marks the outgoing request as already forwarded to prevent loops.
 	peerStream, err := runev1.NewRuneServiceClient(conn).Set(forwardCtx(ctx))
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "peer set: %v", err)

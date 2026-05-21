@@ -67,7 +67,7 @@ func NewBufconnConnWithForwarding(t *testing.T, bufSize int, peerConn *grpc.Clie
 	dialer := cluster.NewPeerDialer()
 	peerAddr := peerConn.Target()
 	membership := newFakeMembership("node-self", "node-peer", peerAddr)
-	dialer.DialWith(peerAddr, peerConn)
+	require.NoError(t, dialer.DialWith(peerAddr, peerConn))
 
 	lis := bufconn.Listen(bufSize)
 	srv := server.NewCluster(cfg, store, membership, dialer)
