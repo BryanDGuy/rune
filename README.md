@@ -22,7 +22,7 @@ Pods (Go SDK / future SDKs)
 │   Rune Node A   │     │   Rune Node B   │     │   Rune Node C   │
 │  ┌───────────┐  │     │  ┌───────────┐  │     │  ┌───────────┐  │
 │  │   gRPC    │  │     │  │   gRPC    │  │     │  │   gRPC    │  │
-│  │  Server   │  │     │  │  Server   │  │     │  │  Server   │  │
+│  │  Server   ├──┼─────┼──┤  Server   ├──┼─────┼──┤  Server   │  │
 │  └─────┬─────┘  │     │  └─────┬─────┘  │     │  └─────┬─────┘  │
 │  ┌─────▼─────┐  │     │  ┌─────▼─────┐  │     │  ┌─────▼─────┐  │
 │  │  Router   │  │     │  │  Router   │  │     │  │  Router   │  │
