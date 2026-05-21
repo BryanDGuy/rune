@@ -26,9 +26,6 @@ Pods (Go SDK / future SDKs)
 │  │  Server   ├──┼─────┼──┤  Server   ├──┼─────┼──┤  Server   │  │
 │  └─────┬─────┘  │     │  └─────┬─────┘  │     │  └─────┬─────┘  │
 │  ┌─────▼─────┐  │     │  ┌─────▼─────┐  │     │  ┌─────▼─────┐  │
-│  │  Router   │  │     │  │  Router   │  │     │  │  Router   │  │
-│  └─────┬─────┘  │     │  └─────┬─────┘  │     │  └─────┬─────┘  │
-│  ┌─────▼─────┐  │     │  ┌─────▼─────┐  │     │  ┌─────▼─────┐  │
 │  │  BadgerDB │  │     │  │  BadgerDB │  │     │  │  BadgerDB │  │
 │  └───────────┘  │     │  └───────────┘  │     │  └───────────┘  │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
@@ -84,29 +81,29 @@ Additional language SDKs (Python, Node, Rust) follow the same pattern via genera
 
 ### 2. Router
 
-Determines key ownership using consistent hashing. Default replication factor: 2 (configurable).
+Determines key ownership using consistent hashing. Planned data replication factor: 2 (not yet implemented).
 
 **Node identity:** Each node carries a stable `ID` (used for ring placement) and an `Addr` (host:port used for dialing). These are kept separate so a node can change its network address (e.g., pod restart with a new IP) without shifting its position on the hash ring and triggering unnecessary key remapping.
 
-**Virtual nodes:** The ring uses 20 virtual nodes (vnodes) per physical node (`ReplicationFactor: 20` in `buraksezer/consistent`) across 271 partitions (`PartitionCount: 271`, a prime). Without vnodes, a small cluster (3–5 nodes) produces uneven ring slices and skewed load. 20 vnodes per node provides uniform distribution without meaningful memory overhead.
+**Virtual nodes:** The ring uses 20 virtual nodes (vnodes) per physical node across 271 partitions (`PartitionCount: 271`, a prime). Note: `ReplicationFactor: 20` in `buraksezer/consistent` controls the vnode count, not the data replication factor. Without vnodes, a small cluster (3–5 nodes) produces uneven ring slices and skewed load. 20 vnodes per node provides uniform distribution without meaningful memory overhead.
 
 Replication exists purely for **availability** — if one node goes down, the key is still readable from the second replica without a cache miss. Rune makes no durability guarantees; the source of truth always lives outside Rune (S3, database, etc.). A cache miss is an expected and acceptable failure mode.
 
-**Write path:**
+**Write path** _(replication not yet implemented)_:
 1. SDK hashes the key locally, connects directly to the primary owning node
 2. Primary stores the value in BadgerDB and returns success immediately
 3. Primary replicates async to the secondary node in the background
 
-**Read path:**
+**Read path** _(replica fallback not yet implemented)_:
 1. SDK hashes the key locally, connects directly to the primary owning node
 2. If the primary is unavailable, SDK falls back to the secondary replica
 3. If both are unavailable, the SDK returns a cache miss — caller fetches from source
 
 **Replica placement** is computed, not stored. Given a key and the current hash ring, the primary is the first node clockwise from the key's hash position. The secondary replica is the next node clockwise. Any node — and the SDK itself — can independently compute both locations from just the key and the ring. No per-key tracking in etcd is needed.
 
-etcd stores only the **ring membership** (the ordered list of nodes and their positions on the hash ring). The SDK watches etcd for ring changes and updates its local copy. All routing decisions are made locally from that cached ring — no etcd round-trip per request.
+etcd stores **node registrations** (ID + address) under `/rune/nodes/{nodeID}`. Each node builds and maintains its local ring from those registrations via an etcd watch — the ring itself is never stored in etcd. All routing decisions are made locally from that cached ring — no etcd round-trip per request.
 
-**Rebalance on node join/leave** uses lazy migration — data is not eagerly moved when the ring changes. When a key's hash position maps to a new owner but the data hasn't migrated yet, the new owner asks the previous owner for the value, serves it to the caller, and stores a local copy. The previous owner's copy expires naturally via TTL or eviction pressure. Data drifts to the correct node over time without any bulk transfer.
+**Rebalance on node join/leave** _(not yet implemented)_ uses lazy migration — data is not eagerly moved when the ring changes. When a key's hash position maps to a new owner but the data hasn't migrated yet, the new owner asks the previous owner for the value, serves it to the caller, and stores a local copy. The previous owner's copy expires naturally via TTL or eviction pressure. Data drifts to the correct node over time without any bulk transfer.
 
 This approach is safe for a cache because:
 - Temporary inconsistency in key location is acceptable — callers always get a value or a cache miss, never an error
@@ -124,10 +121,9 @@ BadgerDB embedded in each Rune process. BadgerDB's WiscKey-inspired design store
 ### 4. Cluster Coordinator
 
 etcd handles:
-- **Leader election** — one node is elected coordinator for rebalance operations
-- **Membership** — nodes register on startup, deregister on shutdown, are tombstoned on crash
-- **Shard map** — consistent hash ring stored in etcd, watched by all nodes
-- **Rebalance** — triggered by membership changes, coordinated by the elected leader
+- **Membership** — nodes register on startup with a lease + keepalive; lease expiry removes crashed nodes automatically; clean shutdown revokes the lease immediately. All nodes watch the membership prefix and update their local ring on any change.
+- **Leader election** _(not yet implemented)_ — one node elected coordinator for rebalance operations
+- **Rebalance** _(not yet implemented)_ — triggered by membership changes, coordinated by the elected leader
 
 Rune does not implement its own consensus. etcd is a required dependency for cluster mode. Single-node mode (no etcd) is supported for local dev.
 
