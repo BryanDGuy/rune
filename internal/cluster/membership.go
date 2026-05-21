@@ -106,7 +106,8 @@ func (m *Membership) register(ctx context.Context) error {
 		return err
 	}
 	m.wg.Go(func() {
-		for range kaCh { //nolint:revive // drain to prevent the etcd keepalive sender from blocking
+		for range kaCh {
+			continue
 		}
 	})
 	return nil
