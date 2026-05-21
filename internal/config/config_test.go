@@ -2,6 +2,7 @@ package config
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,7 +39,7 @@ func TestEnvOverrides(t *testing.T) {
 	assert.Equal(t, int64(524288000), cfg.MaxStorageBytes) // 500MB
 	assert.InDelta(t, 0.9, cfg.EvictionThreshold, 1e-9)
 	assert.Equal(t, 9100, cfg.MetricsPort)
-	assert.Equal(t, 5*60*1e9, float64(cfg.GCInterval))
+	assert.InDelta(t, float64(5*time.Minute), float64(cfg.GCInterval), 0)
 }
 
 func TestParseBytes(t *testing.T) {

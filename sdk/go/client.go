@@ -145,4 +145,3 @@ func (r *streamReader) Close() error {
 	r.cancel()
 	return nil
 }
-
