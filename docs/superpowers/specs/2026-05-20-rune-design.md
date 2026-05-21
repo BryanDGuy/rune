@@ -48,7 +48,9 @@ The SDK is cluster-aware — it caches the hash ring locally and connects direct
 
 ### 1. gRPC Server
 
-Accepts gRPC connections over HTTP/2. All value transfers use server-streaming RPCs so large blobs are chunked off disk and streamed to the client — no full in-memory buffering required.
+Accepts gRPC connections over HTTP/2. All value transfers use streaming RPCs — the client receives a `Reader` and can begin processing before the full value arrives, so the **client** never needs to buffer the full value in memory.
+
+The **server** does hold each value fully in RAM during a Get or Set. This is an inherent constraint of BadgerDB: its `Item.Value()` API delivers the full blob in memory with no streaming read path from the value log. Provision nodes with enough RAM for `max_concurrent_ops × typical_value_size`. For example, 10 concurrent reads of 500MB documents requires ~5GB of headroom for reads alone.
 
 The client streams values in chunks of **1MB by default** (configurable via `RUNE_STREAM_CHUNK_SIZE`). The server accumulates chunks and writes to BadgerDB in one operation. Below 64KB, gRPC framing overhead dominates. Above 4MB, memory pressure increases without meaningful throughput gains on reads.
 
@@ -117,6 +119,8 @@ This approach is safe for a cache because:
 ### 3. Storage Engine
 
 BadgerDB embedded in each Rune process. BadgerDB's WiscKey-inspired design stores keys in an LSM tree and values in a separate append-only value log — this avoids write amplification for large values and scales to arbitrary value sizes bounded only by disk.
+
+**TTL updates re-read the full value.** `Expire` and `Persist` must read the blob out of BadgerDB and write it back with updated metadata — there is no API to update TTL in place. On large values this is an expensive operation; callers should treat TTL updates as a full read+write cycle in their cost model.
 
 **Eviction:** TTL (optional, caller-set) + weighted score eviction under storage pressure. See Eviction Details section.
 
