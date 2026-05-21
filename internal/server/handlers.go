@@ -79,9 +79,6 @@ func (h *handler) forwardGet(ctx context.Context, peerAddr string, req *runev1.G
 	// forwardCtx marks the outgoing request as already forwarded to prevent loops.
 	peerStream, err := runev1.NewRuneServiceClient(conn).Get(forwardCtx(ctx), req)
 	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return status.Error(codes.NotFound, "key not found")
-		}
 		return status.Errorf(codes.Unavailable, "peer get: %v", err)
 	}
 	for {

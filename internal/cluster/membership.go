@@ -82,6 +82,7 @@ func (m *Membership) Start(ctx context.Context) error {
 
 	if err := m.populate(ctx); err != nil {
 		m.cancel()
+		m.wg.Wait()
 		return fmt.Errorf("populate ring: %w", err)
 	}
 

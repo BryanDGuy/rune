@@ -86,7 +86,7 @@ func (c *ClusterClient) clientFor(key string) (*Client, error) {
 		return nil, fmt.Errorf("cluster: no client for node %s (%s)", node.ID, node.Addr)
 	}
 
-	// Dial a new connection. Use write lock for the insert.
+	// Re-check closed under write lock — Close() may have raced between the read above and here.
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed {
