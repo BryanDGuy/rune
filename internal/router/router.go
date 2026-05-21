@@ -8,33 +8,29 @@ import (
 	"github.com/cespare/xxhash/v2"
 )
 
-// ErrNoNodes is returned by Lookup and LookupN when the ring has no members.
 var ErrNoNodes = errors.New("router: no nodes in ring")
 
-// Node is a member of the consistent hash ring.
+// Node is a ring member. ID is used for placement; Addr is used for dialing.
+// Keeping them separate means address changes don't shift ring position.
 type Node struct {
-	ID   string // stable identifier used for ring placement
-	Addr string // host:port used for dialing
+	ID   string
+	Addr string
 }
 
-// String implements consistent.Member. The ring uses ID for placement.
 func (n Node) String() string { return n.ID }
 
 type xxHasher struct{}
 
 func (h xxHasher) Sum64(data []byte) uint64 { return xxhash.Sum64(data) }
 
-// Router maps keys to owning nodes using consistent hashing with virtual nodes.
-// It is safe for concurrent use.
 type Router struct {
 	ring  *consistent.Consistent
 	nodes map[string]Node // ID → Node, for Addr lookup after ring resolution
 	mu    sync.RWMutex
 }
 
-// New creates a Router.
-// It uses a high Load to disable bounded-load redistribution; this preserves
-// standard consistent hash stability (only keys owned by a removed node remap).
+// New creates a Router. Load is set high to disable bounded-load redistribution,
+// preserving standard consistent hash stability: only keys owned by a removed node remap.
 func New() *Router {
 	cfg := consistent.Config{
 		PartitionCount:    271, // prime; distributes partitions evenly across the ring
@@ -48,7 +44,6 @@ func New() *Router {
 	}
 }
 
-// Add adds a node to the ring. Safe to call concurrently.
 func (r *Router) Add(node Node) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -56,7 +51,6 @@ func (r *Router) Add(node Node) {
 	r.nodes[node.ID] = node
 }
 
-// Remove removes a node by ID from the ring. Safe to call concurrently.
 func (r *Router) Remove(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -64,10 +58,6 @@ func (r *Router) Remove(id string) {
 	delete(r.nodes, id)
 }
 
-// Lookup returns the primary owning node for key.
-// Returns ErrNoNodes if the ring is empty.
-// Lookup returns the primary owning node for key.
-// Returns ErrNoNodes if the ring is empty.
 func (r *Router) Lookup(key string) (Node, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -79,9 +69,8 @@ func (r *Router) Lookup(key string) (Node, error) {
 	return r.nodes[m.String()], nil
 }
 
-// LookupN returns up to n nodes for key in ring order — primary first, then replicas.
-// If fewer than n nodes exist, returns however many are available (no error).
-// Returns ErrNoNodes if the ring is empty.
+// LookupN returns up to n nodes in ring order (primary first). Returns fewer
+// than n without error if the ring has fewer members. Returns ErrNoNodes if empty.
 func (r *Router) LookupN(key string, n int) ([]Node, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -107,7 +96,6 @@ func (r *Router) LookupN(key string, n int) ([]Node, error) {
 	return result, nil
 }
 
-// Len returns the number of nodes currently in the ring.
 func (r *Router) Len() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
