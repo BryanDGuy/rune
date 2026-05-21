@@ -81,7 +81,7 @@ Additional language SDKs (Python, Node, Rust) follow the same pattern via genera
 
 ### 2. Router
 
-Determines key ownership using consistent hashing. Planned data replication factor: 2 (not yet implemented).
+Determines key ownership using consistent hashing. Default replication factor: 2.
 
 **Node identity:** Each node carries a stable `ID` (used for ring placement) and an `Addr` (host:port used for dialing). These are kept separate so a node can change its network address (e.g., pod restart with a new IP) without shifting its position on the hash ring and triggering unnecessary key remapping.
 
@@ -89,12 +89,12 @@ Determines key ownership using consistent hashing. Planned data replication fact
 
 Replication exists purely for **availability** — if one node goes down, the key is still readable from the second replica without a cache miss. Rune makes no durability guarantees; the source of truth always lives outside Rune (S3, database, etc.). A cache miss is an expected and acceptable failure mode.
 
-**Write path** _(replication not yet implemented)_:
+**Write path:**
 1. SDK hashes the key locally, connects directly to the primary owning node
 2. Primary stores the value in BadgerDB and returns success immediately
 3. Primary replicates async to the secondary node in the background
 
-**Read path** _(replica fallback not yet implemented)_:
+**Read path:**
 1. SDK hashes the key locally, connects directly to the primary owning node
 2. If the primary is unavailable, SDK falls back to the secondary replica
 3. If both are unavailable, the SDK returns a cache miss — caller fetches from source
@@ -103,7 +103,7 @@ Replication exists purely for **availability** — if one node goes down, the ke
 
 etcd stores **node registrations** (ID + address) under `/rune/nodes/{nodeID}`. Each node builds and maintains its local ring from those registrations via an etcd watch — the ring itself is never stored in etcd. All routing decisions are made locally from that cached ring — no etcd round-trip per request.
 
-**Rebalance on node join/leave** _(not yet implemented)_ uses lazy migration — data is not eagerly moved when the ring changes. When a key's hash position maps to a new owner but the data hasn't migrated yet, the new owner asks the previous owner for the value, serves it to the caller, and stores a local copy. The previous owner's copy expires naturally via TTL or eviction pressure. Data drifts to the correct node over time without any bulk transfer.
+**Rebalance on node join/leave** uses lazy migration — data is not eagerly moved when the ring changes. When a key's hash position maps to a new owner but the data hasn't migrated yet, the new owner asks the previous owner for the value, serves it to the caller, and stores a local copy. The previous owner's copy expires naturally via TTL or eviction pressure. Data drifts to the correct node over time without any bulk transfer.
 
 This approach is safe for a cache because:
 - Temporary inconsistency in key location is acceptable — callers always get a value or a cache miss, never an error
@@ -122,8 +122,8 @@ BadgerDB embedded in each Rune process. BadgerDB's WiscKey-inspired design store
 
 etcd handles:
 - **Membership** — nodes register on startup with a lease + keepalive; lease expiry removes crashed nodes automatically; clean shutdown revokes the lease immediately. All nodes watch the membership prefix and update their local ring on any change.
-- **Leader election** _(not yet implemented)_ — one node elected coordinator for rebalance operations
-- **Rebalance** _(not yet implemented)_ — triggered by membership changes, coordinated by the elected leader
+- **Leader election** — one node elected coordinator for rebalance operations
+- **Rebalance** — triggered by membership changes, coordinated by the elected leader
 
 Rune does not implement its own consensus. etcd is a required dependency for cluster mode. Single-node mode (no etcd) is supported for local dev.
 
@@ -189,7 +189,9 @@ Configuration via environment variables. Key settings:
 | `RUNE_GC_INTERVAL`           | `10m`            |
 | `RUNE_GC_DISCARD_RATIO`      | `0.5`            |
 
-Cluster-mode settings (etcd endpoints, replication factor) are roadmap items — not yet implemented.
+| `RUNE_ETCD_ENDPOINTS`        | _(empty)_        |
+| `RUNE_NODE_ID`               | hostname         |
+| `RUNE_NODE_ADDR`             | `localhost:{RUNE_PORT}` |
 
 ## Deployment
 
