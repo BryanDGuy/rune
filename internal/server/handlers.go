@@ -20,23 +20,22 @@ type handler struct {
 	srv *Server
 }
 
-// owningAddr returns the peer address that owns key, or "" if this node owns it
-// or cluster mode is off. "" means: serve locally.
-func (h *handler) owningAddr(ctx context.Context, key string) string {
+// forwardTarget reports the peer a request for key should be forwarded to.
+// ok is false when this node serves the request itself: cluster mode is off,
+// the request was already forwarded once (loop guard), this node owns the key,
+// or the ring lookup failed (degrade to serving locally).
+func (h *handler) forwardTarget(ctx context.Context, key string) (addr string, ok bool) {
 	if !h.srv.clusterMode() {
-		return ""
+		return "", false
 	}
-	// Already forwarded once — serve locally to prevent routing loops.
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		if len(md[metaForwarded]) > 0 {
-			return ""
-		}
+	if md, found := metadata.FromIncomingContext(ctx); found && len(md[metaForwarded]) > 0 {
+		return "", false
 	}
 	node, err := h.srv.membership.Ring().Lookup(key)
 	if err != nil || node.ID == h.srv.membership.NodeID() {
-		return ""
+		return "", false
 	}
-	return node.Addr
+	return node.Addr, true
 }
 
 func forwardCtx(ctx context.Context) context.Context {
@@ -48,7 +47,7 @@ func (h *handler) Ping(_ context.Context, _ *runev1.PingRequest) (*runev1.PingRe
 }
 
 func (h *handler) Get(req *runev1.GetRequest, stream grpc.ServerStreamingServer[runev1.GetResponse]) error {
-	if addr := h.owningAddr(stream.Context(), req.Key); addr != "" {
+	if addr, ok := h.forwardTarget(stream.Context(), req.Key); ok {
 		return h.forwardGet(stream.Context(), addr, req, stream)
 	}
 	value, err := h.srv.store.Get(req.Key)
@@ -103,7 +102,7 @@ func (h *handler) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, runev
 		return status.Error(codes.InvalidArgument, "first message must contain SetHeader")
 	}
 
-	if addr := h.owningAddr(stream.Context(), hdr.Key); addr != "" {
+	if addr, ok := h.forwardTarget(stream.Context(), hdr.Key); ok {
 		return h.forwardSet(stream.Context(), addr, hdr, stream)
 	}
 
