@@ -113,8 +113,7 @@ func (m *Membership) grantAndPut(ctx context.Context) error {
 
 // keepAliveLoop streams lease renewals from etcd. The renewal responses carry no
 // information we act on, but the channel closing while ctx is still live means the
-// lease lapsed (etcd unreachable past the TTL) and the node has dropped out of the
-// ring — so we re-register to rejoin.
+// lease lapsed (etcd unreachable past the TTL) and the node has dropped out of the ring.
 func (m *Membership) keepAliveLoop(ctx context.Context) {
 	for {
 		kaCh, err := m.store.KeepAlive(ctx, m.leaseID)
@@ -174,7 +173,7 @@ func (m *Membership) watchLoop(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		// Watch channel closed unexpectedly — resync ring state before reconnecting.
+		// An unexpected watch drop (ctx still live) may have skipped events, leaving the ring stale.
 		_ = m.populate(ctx)
 		select {
 		case <-ctx.Done():

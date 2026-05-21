@@ -14,7 +14,10 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-var ErrNoNodes = errors.New("cluster: no nodes in ring")
+var (
+	ErrNoNodes             = router.ErrNoNodes
+	errClusterClientClosed = errors.New("cluster: ClusterClient is closed")
+)
 
 // ClusterClient routes Get/Set to the correct Rune node using a local ring copy.
 type ClusterClient struct {
@@ -63,19 +66,16 @@ func NewClusterClientFromRingAndClients(ring *router.Router, clients map[string]
 }
 
 func (c *ClusterClient) clientFor(key string) (*Client, error) {
+	node, err := c.ring.Lookup(key)
+	if err != nil {
+		return nil, err
+	}
+
 	c.mu.RLock()
 	if c.closed {
 		c.mu.RUnlock()
-		return nil, errors.New("cluster: ClusterClient is closed")
+		return nil, errClusterClientClosed
 	}
-	c.mu.RUnlock()
-
-	node, err := c.ring.Lookup(key)
-	if err != nil {
-		return nil, ErrNoNodes
-	}
-
-	c.mu.RLock()
 	client, ok := c.clients[node.Addr]
 	c.mu.RUnlock()
 	if ok {
@@ -90,7 +90,7 @@ func (c *ClusterClient) clientFor(key string) (*Client, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed {
-		return nil, errors.New("cluster: ClusterClient is closed")
+		return nil, errClusterClientClosed
 	}
 	if client, ok = c.clients[node.Addr]; ok {
 		return client, nil

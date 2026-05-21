@@ -69,12 +69,20 @@ func (h *handler) Get(req *runev1.GetRequest, stream grpc.ServerStreamingServer[
 	return nil
 }
 
-func (h *handler) forwardGet(ctx context.Context, peerAddr string, req *runev1.GetRequest, stream grpc.ServerStreamingServer[runev1.GetResponse]) error {
+func (h *handler) peerClient(peerAddr string) (runev1.RuneServiceClient, error) {
 	conn, err := h.srv.dialer.Dial(peerAddr, nil)
 	if err != nil {
-		return status.Errorf(codes.Unavailable, "dial peer: %v", err)
+		return nil, status.Errorf(codes.Unavailable, "dial peer: %v", err)
 	}
-	peerStream, err := runev1.NewRuneServiceClient(conn).Get(forwardCtx(ctx), req)
+	return runev1.NewRuneServiceClient(conn), nil
+}
+
+func (h *handler) forwardGet(ctx context.Context, peerAddr string, req *runev1.GetRequest, stream grpc.ServerStreamingServer[runev1.GetResponse]) error {
+	client, err := h.peerClient(peerAddr)
+	if err != nil {
+		return err
+	}
+	peerStream, err := client.Get(forwardCtx(ctx), req)
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "peer get: %v", err)
 	}
@@ -131,11 +139,11 @@ func (h *handler) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, runev
 }
 
 func (h *handler) forwardSet(ctx context.Context, peerAddr string, hdr *runev1.SetHeader, stream grpc.ClientStreamingServer[runev1.SetRequest, runev1.SetResponse]) error {
-	conn, err := h.srv.dialer.Dial(peerAddr, nil)
+	client, err := h.peerClient(peerAddr)
 	if err != nil {
-		return status.Errorf(codes.Unavailable, "dial peer: %v", err)
+		return err
 	}
-	peerStream, err := runev1.NewRuneServiceClient(conn).Set(forwardCtx(ctx))
+	peerStream, err := client.Set(forwardCtx(ctx))
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "peer set: %v", err)
 	}
