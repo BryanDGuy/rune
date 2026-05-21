@@ -190,6 +190,3 @@ func (h *handler) Info(_ context.Context, _ *runev1.InfoRequest) (*runev1.InfoRe
 		EvictionsTotal:    info.EvictionsTotal,
 	}, nil
 }
-
-// compile-time interface check
-var _ runev1.RuneServiceServer = (*handler)(nil)
