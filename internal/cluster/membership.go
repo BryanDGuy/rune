@@ -55,11 +55,7 @@ type Membership struct {
 	wg       sync.WaitGroup
 }
 
-func New(client *clientv3.Client, nodeID, nodeAddr string) *Membership {
-	return newWithStore(client, nodeID, nodeAddr)
-}
-
-func newWithStore(store memberStore, nodeID, nodeAddr string) *Membership {
+func New(store memberStore, nodeID, nodeAddr string) *Membership {
 	return &Membership{
 		store:    store,
 		ring:     router.New(),

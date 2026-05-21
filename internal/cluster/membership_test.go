@@ -96,7 +96,7 @@ func (f *fakeStore) simulateNodeLeave(nodeID string) {
 
 func TestMembershipRegistersOnStart(t *testing.T) {
 	store := newFakeStore()
-	m := newWithStore(store, "node-1", "host1:7946")
+	m := New(store, "node-1", "host1:7946")
 	ctx := t.Context()
 
 	require.NoError(t, m.Start(ctx))
@@ -114,7 +114,7 @@ func TestMembershipWatchOnlyMode(t *testing.T) {
 	store.kvs[nodePrefix+"node-2"] = string(info)
 
 	// nodeAddr="" means watch-only (SDK mode).
-	m := newWithStore(store, "", "")
+	m := New(store, "", "")
 	ctx := t.Context()
 
 	require.NoError(t, m.Start(ctx))
@@ -130,7 +130,7 @@ func TestMembershipWatchOnlyMode(t *testing.T) {
 
 func TestMembershipRingUpdatesOnNodeJoin(t *testing.T) {
 	store := newFakeStore()
-	m := newWithStore(store, "node-1", "host1:7946")
+	m := New(store, "node-1", "host1:7946")
 	ctx := t.Context()
 
 	require.NoError(t, m.Start(ctx))
@@ -153,7 +153,7 @@ func TestMembershipRingUpdatesOnNodeLeave(t *testing.T) {
 	info, _ := json.Marshal(NodeInfo{ID: "node-2", Addr: "host2:7946"})
 	store.kvs[nodePrefix+"node-2"] = string(info)
 
-	m := newWithStore(store, "node-1", "host1:7946")
+	m := New(store, "node-1", "host1:7946")
 	ctx := t.Context()
 
 	require.NoError(t, m.Start(ctx))
@@ -174,7 +174,7 @@ func TestMembershipRingUpdatesOnNodeLeave(t *testing.T) {
 
 func TestMembershipStopRevokesLease(t *testing.T) {
 	store := newFakeStore()
-	m := newWithStore(store, "node-1", "host1:7946")
+	m := New(store, "node-1", "host1:7946")
 	ctx := t.Context()
 
 	require.NoError(t, m.Start(ctx))
