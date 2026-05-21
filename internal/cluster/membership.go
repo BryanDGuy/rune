@@ -39,6 +39,7 @@ type memberStore interface {
 type MembershipIface interface {
 	Ring() *router.Router
 	NodeID() string
+	Stop()
 }
 
 // Membership watches etcd for node join/leave events and keeps a router.Router current.
@@ -54,7 +55,6 @@ type Membership struct {
 	wg       sync.WaitGroup
 }
 
-// New creates a Membership backed by a real etcd client.
 func New(client *clientv3.Client, nodeID, nodeAddr string) *Membership {
 	return newWithStore(client, nodeID, nodeAddr)
 }
@@ -162,7 +162,6 @@ func (m *Membership) Ring() *router.Router {
 	return m.ring
 }
 
-// NodeID returns this node's stable identity.
 func (m *Membership) NodeID() string {
 	return m.nodeID
 }

@@ -12,6 +12,7 @@ type fakeMembership struct {
 
 func (f *fakeMembership) Ring() *router.Router { return f.ring }
 func (f *fakeMembership) NodeID() string       { return f.nodeID }
+func (f *fakeMembership) Stop()                {}
 
 // newFakeMembership builds a MembershipIface where selfID is NOT in the ring,
 // so every key lookup returns peerID → peerAddr, causing all requests to forward.

@@ -47,8 +47,6 @@ func main() {
 	}
 }
 
-// buildServer wires up the server and returns a cleanup function for cluster resources.
-// In single-node mode, cleanup is a no-op.
 func buildServer(cfg *config.Config, store storage.Storage) (*server.Server, func()) {
 	if len(cfg.EtcdEndpoints) == 0 {
 		return server.New(cfg, store), func() {}

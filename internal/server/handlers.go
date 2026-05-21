@@ -39,7 +39,6 @@ func (h *handler) owningAddr(ctx context.Context, key string) string {
 	return node.Addr
 }
 
-// forwardCtx returns a context carrying the forwarded metadata header.
 func forwardCtx(ctx context.Context) context.Context {
 	return metadata.AppendToOutgoingContext(ctx, metaForwarded, "1")
 }
@@ -76,7 +75,6 @@ func (h *handler) forwardGet(ctx context.Context, peerAddr string, req *runev1.G
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "dial peer: %v", err)
 	}
-	// forwardCtx marks the outgoing request as already forwarded to prevent loops.
 	peerStream, err := runev1.NewRuneServiceClient(conn).Get(forwardCtx(ctx), req)
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "peer get: %v", err)
@@ -138,7 +136,6 @@ func (h *handler) forwardSet(ctx context.Context, peerAddr string, hdr *runev1.S
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "dial peer: %v", err)
 	}
-	// forwardCtx marks the outgoing request as already forwarded to prevent loops.
 	peerStream, err := runev1.NewRuneServiceClient(conn).Set(forwardCtx(ctx))
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "peer set: %v", err)

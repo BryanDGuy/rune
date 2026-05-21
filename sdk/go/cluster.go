@@ -126,8 +126,8 @@ func (c *ClusterClient) Close() error {
 		return nil
 	}
 	c.closed = true
-	if m, ok := c.membership.(interface{ Stop() }); ok {
-		m.Stop()
+	if c.membership != nil {
+		c.membership.Stop()
 	}
 	for _, client := range c.clients {
 		_ = client.Close()
