@@ -15,7 +15,6 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 )
 
-// BaseConfig returns a standard test config with sane defaults and a temp DataDir.
 func BaseConfig(t *testing.T) *config.Config {
 	t.Helper()
 	return &config.Config{
