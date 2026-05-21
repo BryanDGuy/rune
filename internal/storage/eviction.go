@@ -71,8 +71,6 @@ func (e *evictionIndex) snapshot(sizeWeight, ageWeight float64) []candidate {
 	return cs
 }
 
-// checkEviction evaluates storage pressure and evicts keys by descending score
-// until usage drops below the configured threshold.
 func checkEviction(ctx context.Context, store *BadgerStore) error {
 	lsm, vlog := store.db.Size()
 	threshold := int64(float64(store.cfg.MaxStorageBytes) * store.cfg.EvictionThreshold)

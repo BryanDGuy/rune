@@ -2,7 +2,6 @@ package storage
 
 import "errors"
 
-// ErrNotFound is returned by Get and TTL when the key does not exist.
 var ErrNotFound = errors.New("key not found")
 
 type Info struct {
