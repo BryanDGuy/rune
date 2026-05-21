@@ -71,7 +71,7 @@ func TestIntegrationGracefulShutdown(t *testing.T) {
 	require.NoError(t, err)
 
 	lis := bufconn.Listen(1 << 20)
-	srv := server.New(cfg, store)
+	srv := server.New(cfg, store, nil)
 	srv.StartOnListener(lis)
 
 	// Stop should complete without hanging.

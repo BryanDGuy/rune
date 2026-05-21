@@ -44,7 +44,7 @@ func NewBufconnConn(t *testing.T, bufSize int) (*grpc.ClientConn, func()) {
 	store, err := storage.NewBadgerStore(cfg)
 	require.NoError(t, err)
 	lis := bufconn.Listen(bufSize)
-	srv := server.New(cfg, store)
+	srv := server.New(cfg, store, nil)
 	srv.StartOnListener(lis)
 	addr := fmt.Sprintf("passthrough://bufnet-%d", bufconnSeq.Add(1))
 	conn, err := grpc.NewClient(
@@ -76,7 +76,7 @@ func NewBufconnConnWithForwarding(t *testing.T, bufSize int, peerConn *grpc.Clie
 	require.NoError(t, dialer.DialWith(peerAddr, peerConn))
 
 	lis := bufconn.Listen(bufSize)
-	srv := server.NewCluster(cfg, store, membership, dialer)
+	srv := server.New(cfg, store, &server.ClusterOptions{Membership: membership, Dialer: dialer})
 	srv.StartOnListener(lis)
 
 	conn, err := grpc.NewClient(

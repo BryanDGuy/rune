@@ -23,18 +23,20 @@ type Server struct {
 	tracker    *connTracker
 }
 
-// New creates a single-node Server (no cluster).
-func New(cfg *config.Config, store storage.Storage) *Server {
-	return newServer(cfg, store, nil, nil)
+// ClusterOptions wires a Server into a cluster. Membership and Dialer must both
+// be set together. A nil *ClusterOptions means single-node mode.
+type ClusterOptions struct {
+	Membership cluster.MembershipIface
+	Dialer     *cluster.PeerDialer
 }
 
-// NewCluster creates a Server wired into a cluster.
-func NewCluster(cfg *config.Config, store storage.Storage, m cluster.MembershipIface, d *cluster.PeerDialer) *Server {
-	return newServer(cfg, store, m, d)
-}
-
-func newServer(cfg *config.Config, store storage.Storage, m cluster.MembershipIface, d *cluster.PeerDialer) *Server {
-	s := &Server{cfg: cfg, store: store, membership: m, dialer: d}
+// New creates a Server. Pass a non-nil clusterOpts to run in cluster mode; nil is single-node.
+func New(cfg *config.Config, store storage.Storage, clusterOpts *ClusterOptions) *Server {
+	s := &Server{cfg: cfg, store: store}
+	if clusterOpts != nil {
+		s.membership = clusterOpts.Membership
+		s.dialer = clusterOpts.Dialer
+	}
 	s.tracker = &connTracker{}
 	s.grpcServer = grpc.NewServer(grpc.StatsHandler(s.tracker))
 	runev1.RegisterRuneServiceServer(s.grpcServer, &handler{srv: s})
