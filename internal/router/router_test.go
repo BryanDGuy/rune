@@ -103,7 +103,7 @@ func TestStabilityOnNodeRemoval(t *testing.T) {
 				key, before[key], n.ID)
 		}
 	}
-	assert.Greater(t, remapped, 0, "some keys should remap after removing node-3")
+	assert.Positive(t, remapped, "some keys should remap after removing node-3")
 }
 
 func TestDistribution(t *testing.T) {

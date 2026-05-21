@@ -27,9 +27,9 @@ func (h xxHasher) Sum64(data []byte) uint64 { return xxhash.Sum64(data) }
 // Router maps keys to owning nodes using consistent hashing with virtual nodes.
 // It is safe for concurrent use.
 type Router struct {
-	mu    sync.RWMutex
 	ring  *consistent.Consistent
 	nodes map[string]Node // ID → Node, for Addr lookup after ring resolution
+	mu    sync.RWMutex
 }
 
 // New creates a Router.
