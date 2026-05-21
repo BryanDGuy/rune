@@ -11,7 +11,6 @@ import (
 var errDialerClosed = errors.New("cluster: PeerDialer is closed")
 
 // PeerDialer maintains a pool of gRPC connections to peer Rune nodes.
-// Connections are created lazily on first Dial and reused on subsequent calls.
 type PeerDialer struct {
 	conns  map[string]*grpc.ClientConn
 	mu     sync.RWMutex
@@ -45,7 +44,9 @@ func (d *PeerDialer) Dial(addr string, extraOpts ...grpc.DialOption) (*grpc.Clie
 		return conn, nil
 	}
 
-	opts := append([]grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}, extraOpts...)
+	opts := make([]grpc.DialOption, 0, 1+len(extraOpts))
+	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	opts = append(opts, extraOpts...)
 	conn, err := grpc.NewClient(addr, opts...)
 	if err != nil {
 		return nil, err
@@ -54,7 +55,7 @@ func (d *PeerDialer) Dial(addr string, extraOpts ...grpc.DialOption) (*grpc.Clie
 	return conn, nil
 }
 
-// Close closes all pooled connections. Subsequent Dial calls return an error.
+// Close closes all pooled connections.
 func (d *PeerDialer) Close() {
 	d.mu.Lock()
 	defer d.mu.Unlock()

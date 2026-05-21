@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"net"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -57,4 +58,35 @@ func TestPeerDialerClosePreventsFurtherDials(t *testing.T) {
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "closed")
+}
+
+func TestPeerDialerConcurrentDial(t *testing.T) {
+	d := NewPeerDialer()
+	defer d.Close()
+	dialOpts := []grpc.DialOption{
+		grpc.WithContextDialer(func(_ context.Context, _ string) (net.Conn, error) {
+			return nil, nil
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	}
+	const n = 20
+	conns := make([]*grpc.ClientConn, n)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := range n {
+		go func(idx int) {
+			defer wg.Done()
+			conn, err := d.Dial("localhost:9999", dialOpts...)
+			errs[idx] = err
+			conns[idx] = conn
+		}(i)
+	}
+	wg.Wait()
+	for _, err := range errs {
+		require.NoError(t, err)
+	}
+	for _, c := range conns {
+		assert.Same(t, conns[0], c)
+	}
 }
