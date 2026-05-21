@@ -19,15 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	RuneService_Ping_FullMethodName    = "/rune.v1.RuneService/Ping"
-	RuneService_Get_FullMethodName     = "/rune.v1.RuneService/Get"
-	RuneService_Set_FullMethodName     = "/rune.v1.RuneService/Set"
-	RuneService_Delete_FullMethodName  = "/rune.v1.RuneService/Delete"
-	RuneService_Exists_FullMethodName  = "/rune.v1.RuneService/Exists"
-	RuneService_Expire_FullMethodName  = "/rune.v1.RuneService/Expire"
-	RuneService_TTL_FullMethodName     = "/rune.v1.RuneService/TTL"
-	RuneService_Persist_FullMethodName = "/rune.v1.RuneService/Persist"
-	RuneService_Info_FullMethodName    = "/rune.v1.RuneService/Info"
+	RuneService_Ping_FullMethodName   = "/rune.v1.RuneService/Ping"
+	RuneService_Get_FullMethodName    = "/rune.v1.RuneService/Get"
+	RuneService_Set_FullMethodName    = "/rune.v1.RuneService/Set"
+	RuneService_Delete_FullMethodName = "/rune.v1.RuneService/Delete"
+	RuneService_Exists_FullMethodName = "/rune.v1.RuneService/Exists"
+	RuneService_Info_FullMethodName   = "/rune.v1.RuneService/Info"
 )
 
 // RuneServiceClient is the client API for RuneService service.
@@ -41,9 +38,6 @@ type RuneServiceClient interface {
 	Set(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[SetRequest, SetResponse], error)
 	Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error)
 	Exists(ctx context.Context, in *ExistsRequest, opts ...grpc.CallOption) (*ExistsResponse, error)
-	Expire(ctx context.Context, in *ExpireRequest, opts ...grpc.CallOption) (*ExpireResponse, error)
-	TTL(ctx context.Context, in *TTLRequest, opts ...grpc.CallOption) (*TTLResponse, error)
-	Persist(ctx context.Context, in *PersistRequest, opts ...grpc.CallOption) (*PersistResponse, error)
 	Info(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error)
 }
 
@@ -117,36 +111,6 @@ func (c *runeServiceClient) Exists(ctx context.Context, in *ExistsRequest, opts 
 	return out, nil
 }
 
-func (c *runeServiceClient) Expire(ctx context.Context, in *ExpireRequest, opts ...grpc.CallOption) (*ExpireResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ExpireResponse)
-	err := c.cc.Invoke(ctx, RuneService_Expire_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *runeServiceClient) TTL(ctx context.Context, in *TTLRequest, opts ...grpc.CallOption) (*TTLResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TTLResponse)
-	err := c.cc.Invoke(ctx, RuneService_TTL_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *runeServiceClient) Persist(ctx context.Context, in *PersistRequest, opts ...grpc.CallOption) (*PersistResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(PersistResponse)
-	err := c.cc.Invoke(ctx, RuneService_Persist_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *runeServiceClient) Info(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(InfoResponse)
@@ -168,9 +132,6 @@ type RuneServiceServer interface {
 	Set(grpc.ClientStreamingServer[SetRequest, SetResponse]) error
 	Delete(context.Context, *DeleteRequest) (*DeleteResponse, error)
 	Exists(context.Context, *ExistsRequest) (*ExistsResponse, error)
-	Expire(context.Context, *ExpireRequest) (*ExpireResponse, error)
-	TTL(context.Context, *TTLRequest) (*TTLResponse, error)
-	Persist(context.Context, *PersistRequest) (*PersistResponse, error)
 	Info(context.Context, *InfoRequest) (*InfoResponse, error)
 	mustEmbedUnimplementedRuneServiceServer()
 }
@@ -196,15 +157,6 @@ func (UnimplementedRuneServiceServer) Delete(context.Context, *DeleteRequest) (*
 }
 func (UnimplementedRuneServiceServer) Exists(context.Context, *ExistsRequest) (*ExistsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Exists not implemented")
-}
-func (UnimplementedRuneServiceServer) Expire(context.Context, *ExpireRequest) (*ExpireResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Expire not implemented")
-}
-func (UnimplementedRuneServiceServer) TTL(context.Context, *TTLRequest) (*TTLResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method TTL not implemented")
-}
-func (UnimplementedRuneServiceServer) Persist(context.Context, *PersistRequest) (*PersistResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Persist not implemented")
 }
 func (UnimplementedRuneServiceServer) Info(context.Context, *InfoRequest) (*InfoResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Info not implemented")
@@ -302,60 +254,6 @@ func _RuneService_Exists_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RuneService_Expire_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ExpireRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(RuneServiceServer).Expire(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: RuneService_Expire_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuneServiceServer).Expire(ctx, req.(*ExpireRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _RuneService_TTL_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(TTLRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(RuneServiceServer).TTL(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: RuneService_TTL_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuneServiceServer).TTL(ctx, req.(*TTLRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _RuneService_Persist_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PersistRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(RuneServiceServer).Persist(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: RuneService_Persist_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuneServiceServer).Persist(ctx, req.(*PersistRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _RuneService_Info_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(InfoRequest)
 	if err := dec(in); err != nil {
@@ -392,18 +290,6 @@ var RuneService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Exists",
 			Handler:    _RuneService_Exists_Handler,
-		},
-		{
-			MethodName: "Expire",
-			Handler:    _RuneService_Expire_Handler,
-		},
-		{
-			MethodName: "TTL",
-			Handler:    _RuneService_TTL_Handler,
-		},
-		{
-			MethodName: "Persist",
-			Handler:    _RuneService_Persist_Handler,
 		},
 		{
 			MethodName: "Info",

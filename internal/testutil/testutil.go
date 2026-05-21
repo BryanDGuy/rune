@@ -24,9 +24,8 @@ func BaseConfig(t *testing.T) *config.Config {
 		EvictionSizeWeight: 1.0,
 		EvictionAgeWeight:  1.0,
 		StreamChunkSize:    1 << 20,
-		GCInterval:         time.Hour,
-		GCDiscardRatio:     0.5,
-		TTLSweepInterval:   time.Hour,
+		GCInterval:     time.Hour,
+		GCDiscardRatio: 0.5,
 	}
 }
 

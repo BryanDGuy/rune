@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,10 +12,6 @@ import (
 	badger "github.com/dgraph-io/badger/v4"
 )
 
-const (
-	ttlNoExpiry = int64(-1) // key exists with no expiration
-	ttlNotFound = int64(-2) // key does not exist
-)
 
 type BadgerStore struct {
 	db             *badger.DB
@@ -143,76 +138,6 @@ func (s *BadgerStore) Exists(keys ...string) (int64, error) {
 		return nil
 	})
 	return count, err
-}
-
-func (s *BadgerStore) Expire(key string, ttlSeconds int64) (bool, error) {
-	var found bool
-	err := s.db.Update(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(key))
-		if errors.Is(err, badger.ErrKeyNotFound) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		found = true
-		return item.Value(func(val []byte) error {
-			entry := badger.NewEntry([]byte(key), val).
-				WithTTL(time.Duration(ttlSeconds) * time.Second)
-			return txn.SetEntry(entry)
-		})
-	})
-	return found, err
-}
-
-func (s *BadgerStore) TTL(key string) (int64, error) {
-	var ttlSecs int64
-	err := s.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(key))
-		if errors.Is(err, badger.ErrKeyNotFound) {
-			ttlSecs = ttlNotFound
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		expiresAt := item.ExpiresAt()
-		if expiresAt == 0 {
-			ttlSecs = ttlNoExpiry
-			return nil
-		}
-		if expiresAt > math.MaxInt64 {
-			ttlSecs = ttlNoExpiry
-			return nil
-		}
-		remaining := time.Until(time.Unix(int64(expiresAt), 0))
-		if remaining <= 0 {
-			// Key has expired but BadgerDB hasn't reaped it yet — treat as not found.
-			ttlSecs = ttlNotFound
-			return nil
-		}
-		ttlSecs = int64(remaining.Seconds())
-		return nil
-	})
-	return ttlSecs, err
-}
-
-func (s *BadgerStore) Persist(key string) (bool, error) {
-	var found bool
-	err := s.db.Update(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(key))
-		if errors.Is(err, badger.ErrKeyNotFound) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		found = true
-		return item.Value(func(val []byte) error {
-			return txn.Set([]byte(key), val)
-		})
-	})
-	return found, err
 }
 
 func (s *BadgerStore) Info() (Info, error) {

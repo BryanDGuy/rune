@@ -11,9 +11,6 @@ service RuneService {
   rpc Set(stream SetRequest) returns (SetResponse);
   rpc Delete(DeleteRequest) returns (DeleteResponse);
   rpc Exists(ExistsRequest) returns (ExistsResponse);
-  rpc Expire(ExpireRequest) returns (ExpireResponse);
-  rpc TTL(TTLRequest) returns (TTLResponse);
-  rpc Persist(PersistRequest) returns (PersistResponse);
   rpc Info(InfoRequest) returns (InfoResponse);
 }
 
@@ -40,21 +37,6 @@ message DeleteResponse { int64 deleted = 1; }
 
 message ExistsRequest { repeated string keys = 1; }
 message ExistsResponse { int64 count = 1; }
-
-message ExpireRequest {
-  string key = 1;
-  int64 ttl_seconds = 2;
-}
-message ExpireResponse { bool ok = 1; }
-
-message TTLRequest { string key = 1; }
-message TTLResponse {
-  // -1 = no TTL (persists indefinitely). -2 = key not found.
-  int64 ttl_seconds = 1;
-}
-
-message PersistRequest { string key = 1; }
-message PersistResponse { bool ok = 1; }
 
 message InfoRequest {}
 message InfoResponse {

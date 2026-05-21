@@ -63,9 +63,6 @@ The client streams values in chunks of **1MB by default** (configurable via `RUN
 | `Set` | Client-streaming: caller streams value chunks to server |
 | `Delete` | Delete one or more keys |
 | `Exists` | Check key existence |
-| `Expire` | Set TTL in seconds |
-| `TTL` | Get remaining TTL |
-| `Persist` | Remove TTL from key |
 | `Keys` | Server-streaming: stream keys matching a pattern |
 | `Scan` | Cursor-based key iteration |
 | `MGet` | Bulk fetch (streaming per value) |
@@ -195,7 +192,6 @@ Configuration via environment variables. Key settings:
 | `RUNE_STREAM_CHUNK_SIZE`     | `1048576`        |
 | `RUNE_GC_INTERVAL`           | `10m`            |
 | `RUNE_GC_DISCARD_RATIO`      | `0.5`            |
-| `RUNE_TTL_SWEEP_INTERVAL`    | `60s`            |
 
 Cluster-mode settings (etcd endpoints, replication factor) are roadmap items — not yet implemented.
 

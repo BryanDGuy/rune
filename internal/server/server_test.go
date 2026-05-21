@@ -156,47 +156,6 @@ func TestExists(t *testing.T) {
 	assert.Equal(t, int64(1), resp.Count)
 }
 
-func TestExpireAndTTL(t *testing.T) {
-	client, cleanup := newTestClient(t)
-	defer cleanup()
-	ctx := context.Background()
-
-	mustSet(t, client, "ttl-key", []byte("v"), 0)
-
-	expResp, err := client.Expire(ctx, &runev1.ExpireRequest{Key: "ttl-key", TtlSeconds: 120})
-	require.NoError(t, err)
-	assert.True(t, expResp.Ok)
-
-	ttlResp, err := client.TTL(ctx, &runev1.TTLRequest{Key: "ttl-key"})
-	require.NoError(t, err)
-	assert.InDelta(t, int64(120), ttlResp.TtlSeconds, 2)
-}
-
-func TestTTLNotFound(t *testing.T) {
-	client, cleanup := newTestClient(t)
-	defer cleanup()
-
-	resp, err := client.TTL(context.Background(), &runev1.TTLRequest{Key: "missing"})
-	require.NoError(t, err)
-	assert.Equal(t, int64(-2), resp.TtlSeconds)
-}
-
-func TestPersist(t *testing.T) {
-	client, cleanup := newTestClient(t)
-	defer cleanup()
-	ctx := context.Background()
-
-	mustSet(t, client, "persist-key", []byte("v"), 60)
-
-	persistResp, err := client.Persist(ctx, &runev1.PersistRequest{Key: "persist-key"})
-	require.NoError(t, err)
-	assert.True(t, persistResp.Ok)
-
-	ttlResp, err := client.TTL(ctx, &runev1.TTLRequest{Key: "persist-key"})
-	require.NoError(t, err)
-	assert.Equal(t, int64(-1), ttlResp.TtlSeconds)
-}
-
 func TestInfo(t *testing.T) {
 	client, cleanup := newTestClient(t)
 	defer cleanup()
