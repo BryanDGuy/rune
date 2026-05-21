@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -14,8 +15,9 @@ import (
 )
 
 const (
-	nodePrefix      = "/rune/nodes/"
-	leaseTTLSeconds = 10
+	nodePrefix        = "/rune/nodes/"
+	leaseTTLSeconds   = 10
+	reregisterBackoff = time.Second
 )
 
 // NodeInfo is the value stored in etcd for each registered node.
@@ -87,6 +89,14 @@ func (m *Membership) Start(ctx context.Context) error {
 }
 
 func (m *Membership) register(ctx context.Context) error {
+	if err := m.grantAndPut(ctx); err != nil {
+		return err
+	}
+	m.wg.Go(func() { m.keepAliveLoop(ctx) })
+	return nil
+}
+
+func (m *Membership) grantAndPut(ctx context.Context) error {
 	resp, err := m.store.Grant(ctx, leaseTTLSeconds)
 	if err != nil {
 		return err
@@ -97,20 +107,43 @@ func (m *Membership) register(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err = m.store.Put(ctx, nodePrefix+m.nodeID, string(val), clientv3.WithLease(m.leaseID)); err != nil {
-		return err
-	}
+	_, err = m.store.Put(ctx, nodePrefix+m.nodeID, string(val), clientv3.WithLease(m.leaseID))
+	return err
+}
 
-	kaCh, err := m.store.KeepAlive(ctx, m.leaseID)
-	if err != nil {
-		return err
-	}
-	m.wg.Go(func() {
-		for range kaCh {
-			continue
+// keepAliveLoop streams lease renewals from etcd. The renewal responses carry no
+// information we act on, but the channel closing while ctx is still live means the
+// lease lapsed (etcd unreachable past the TTL) and the node has dropped out of the
+// ring — so we re-register to rejoin.
+func (m *Membership) keepAliveLoop(ctx context.Context) {
+	for {
+		kaCh, err := m.store.KeepAlive(ctx, m.leaseID)
+		if err == nil {
+			for {
+				if _, ok := <-kaCh; !ok {
+					break
+				}
+			}
 		}
-	})
-	return nil
+		if ctx.Err() != nil {
+			return
+		}
+		log.Printf("cluster: lease %x lost for node %q, re-registering", m.leaseID, m.nodeID)
+		m.reregister(ctx)
+	}
+}
+
+func (m *Membership) reregister(ctx context.Context) {
+	for ctx.Err() == nil {
+		if err := m.grantAndPut(ctx); err == nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(reregisterBackoff):
+		}
+	}
 }
 
 func (m *Membership) populate(ctx context.Context) error {
