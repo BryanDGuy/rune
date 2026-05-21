@@ -89,7 +89,7 @@ Determines key ownership using consistent hashing. Default replication factor: 2
 
 **Node identity:** Each node carries a stable `ID` (used for ring placement) and an `Addr` (host:port used for dialing). These are kept separate so a node can change its network address (e.g., pod restart with a new IP) without shifting its position on the hash ring and triggering unnecessary key remapping.
 
-**Virtual nodes:** The ring uses 150 virtual nodes (vnodes) per physical node. Without vnodes, a small cluster (3–5 nodes) produces uneven ring slices and skewed load. 150 vnodes per node provides uniform distribution without meaningful memory overhead.
+**Virtual nodes:** The ring uses 20 virtual nodes (vnodes) per physical node (`ReplicationFactor: 20` in `buraksezer/consistent`) across 271 partitions (`PartitionCount: 271`, a prime). Without vnodes, a small cluster (3–5 nodes) produces uneven ring slices and skewed load. 20 vnodes per node provides uniform distribution without meaningful memory overhead.
 
 Replication exists purely for **availability** — if one node goes down, the key is still readable from the second replica without a cache miss. Rune makes no durability guarantees; the source of truth always lives outside Rune (S3, database, etc.). A cache miss is an expected and acceptable failure mode.
 
