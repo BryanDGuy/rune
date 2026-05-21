@@ -1,14 +1,15 @@
 package runesdk
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"time"
 
 	runev1 "github.com/bryandguy/rune/gen/rune/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 )
 
@@ -17,37 +18,28 @@ const chunkSize = 1 << 20 // 1MB
 // ErrNotFound is returned by Get when the key does not exist.
 var ErrNotFound = errors.New("key not found")
 
+// SetOptions configures a Set call. Pass nil for defaults.
+type SetOptions struct {
+	TTL time.Duration
+}
+
 // Client is a Rune cache client.
 type Client struct {
 	conn *grpc.ClientConn
 	grpc runev1.RuneServiceClient
 }
 
-// New creates a Client connected to addr (e.g. "localhost:7946").
-// Uses insecure credentials; TLS is a future concern.
-func New(addr string, opts ...grpc.DialOption) (*Client, error) {
-	defaults := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	}
-	conn, err := grpc.NewClient(addr, append(defaults, opts...)...)
-	if err != nil {
-		return nil, err
-	}
-	return &Client{conn: conn, grpc: runev1.NewRuneServiceClient(conn)}, nil
-}
-
-// NewFromConn creates a Client from an existing gRPC connection.
-// Useful for testing (e.g. with bufconn).
-func NewFromConn(conn *grpc.ClientConn) *Client {
+// NewClient creates a Client from an existing gRPC connection.
+func NewClient(conn *grpc.ClientConn) *Client {
 	return &Client{conn: conn, grpc: runev1.NewRuneServiceClient(conn)}
 }
 
 // Set writes the value from r to the cache at key.
 // The value is chunked and sent via client-streaming gRPC in 1MB pieces.
-func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts ...SetOption) error {
-	o := &setOptions{}
-	for _, opt := range opts {
-		opt(o)
+func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts *SetOptions) error {
+	var ttl time.Duration
+	if opts != nil {
+		ttl = opts.TTL
 	}
 
 	stream, err := c.grpc.Set(ctx)
@@ -55,19 +47,17 @@ func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts ...SetOp
 		return err
 	}
 
-	// Send header first.
 	if err = stream.Send(&runev1.SetRequest{
 		Payload: &runev1.SetRequest_Header{
 			Header: &runev1.SetHeader{
 				Key:        key,
-				TtlSeconds: int64(o.ttl.Seconds()),
+				TtlSeconds: int64(ttl.Seconds()),
 			},
 		},
 	}); err != nil {
 		return err
 	}
 
-	// Stream chunks.
 	buf := make([]byte, chunkSize)
 	for {
 		n, readErr := io.ReadFull(r, buf)
@@ -109,7 +99,7 @@ func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	if err != nil {
 		cancel()
 		if errors.Is(err, io.EOF) {
-			return io.NopCloser(io.Reader(emptyReader{})), nil
+			return io.NopCloser(bytes.NewReader(nil)), nil
 		}
 		if status.Code(err) == codes.NotFound {
 			return nil, ErrNotFound
@@ -155,8 +145,3 @@ func (r *streamReader) Close() error {
 	r.cancel()
 	return nil
 }
-
-// emptyReader is an io.Reader that always returns EOF.
-type emptyReader struct{}
-
-func (emptyReader) Read(_ []byte) (int, error) { return 0, io.EOF }

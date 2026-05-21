@@ -1,11 +1,9 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -13,6 +11,11 @@ import (
 
 	"github.com/bryandguy/rune/internal/config"
 	badger "github.com/dgraph-io/badger/v4"
+)
+
+const (
+	ttlNoExpiry = int64(-1) // key exists with no expiration
+	ttlNotFound = int64(-2) // key does not exist
 )
 
 type BadgerStore struct {
@@ -49,9 +52,7 @@ func NewBadgerStore(cfg *config.Config) (*BadgerStore, error) {
 		return nil, fmt.Errorf("init eviction index: %w", err)
 	}
 
-	s.wg.Add(1)
-	go s.maintenanceLoop(ctx)
-
+	s.wg.Go(func() { s.maintenanceLoop(ctx) })
 	return s, nil
 }
 
@@ -61,7 +62,7 @@ func (s *BadgerStore) Close() error {
 	return s.db.Close()
 }
 
-func (s *BadgerStore) Get(_ context.Context, key string) (io.ReadCloser, error) {
+func (s *BadgerStore) Get(key string) ([]byte, error) {
 	var buf []byte
 	err := s.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
@@ -83,15 +84,11 @@ func (s *BadgerStore) Get(_ context.Context, key string) (io.ReadCloser, error) 
 	}
 	s.hits.Add(1)
 	s.eviction.recordAccess(key)
-	return io.NopCloser(bytes.NewReader(buf)), nil
+	return buf, nil
 }
 
-func (s *BadgerStore) Set(_ context.Context, key string, r io.Reader, ttlSeconds int64) error {
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return fmt.Errorf("read value: %w", err)
-	}
-	entry := badger.NewEntry([]byte(key), data)
+func (s *BadgerStore) Set(key string, value []byte, ttlSeconds int64) error {
+	entry := badger.NewEntry([]byte(key), value)
 	if ttlSeconds > 0 {
 		entry = entry.WithTTL(time.Duration(ttlSeconds) * time.Second)
 	}
@@ -100,14 +97,14 @@ func (s *BadgerStore) Set(_ context.Context, key string, r io.Reader, ttlSeconds
 	}); err != nil {
 		return err
 	}
-	s.eviction.recordSet(key, int64(len(data)))
+	s.eviction.recordSet(key, int64(len(value)))
 	return nil
 }
 
-func (s *BadgerStore) Delete(_ context.Context, keys ...string) (int64, error) {
-	var deleted int64
+func (s *BadgerStore) Delete(keys ...string) (int64, error) {
+	var deleted []string
 	err := s.db.Update(func(txn *badger.Txn) error {
-		deleted = 0
+		deleted = deleted[:0]
 		for _, key := range keys {
 			_, err := txn.Get([]byte(key))
 			if errors.Is(err, badger.ErrKeyNotFound) {
@@ -119,20 +116,20 @@ func (s *BadgerStore) Delete(_ context.Context, keys ...string) (int64, error) {
 			if err := txn.Delete([]byte(key)); err != nil {
 				return err
 			}
-			deleted++
+			deleted = append(deleted, key)
 		}
 		return nil
 	})
 	if err != nil {
 		return 0, err
 	}
-	for _, key := range keys {
+	for _, key := range deleted {
 		s.eviction.remove(key)
 	}
-	return deleted, nil
+	return int64(len(deleted)), nil
 }
 
-func (s *BadgerStore) Exists(_ context.Context, keys ...string) (int64, error) {
+func (s *BadgerStore) Exists(keys ...string) (int64, error) {
 	var count int64
 	err := s.db.View(func(txn *badger.Txn) error {
 		for _, key := range keys {
@@ -148,7 +145,7 @@ func (s *BadgerStore) Exists(_ context.Context, keys ...string) (int64, error) {
 	return count, err
 }
 
-func (s *BadgerStore) Expire(_ context.Context, key string, ttlSeconds int64) (bool, error) {
+func (s *BadgerStore) Expire(key string, ttlSeconds int64) (bool, error) {
 	var found bool
 	err := s.db.Update(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
@@ -168,12 +165,12 @@ func (s *BadgerStore) Expire(_ context.Context, key string, ttlSeconds int64) (b
 	return found, err
 }
 
-func (s *BadgerStore) TTL(_ context.Context, key string) (int64, error) {
+func (s *BadgerStore) TTL(key string) (int64, error) {
 	var ttlSecs int64
 	err := s.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
 		if errors.Is(err, badger.ErrKeyNotFound) {
-			ttlSecs = -2
+			ttlSecs = ttlNotFound
 			return nil
 		}
 		if err != nil {
@@ -181,17 +178,17 @@ func (s *BadgerStore) TTL(_ context.Context, key string) (int64, error) {
 		}
 		expiresAt := item.ExpiresAt()
 		if expiresAt == 0 {
-			ttlSecs = -1
+			ttlSecs = ttlNoExpiry
 			return nil
 		}
 		if expiresAt > math.MaxInt64 {
-			ttlSecs = -1
+			ttlSecs = ttlNoExpiry
 			return nil
 		}
 		remaining := time.Until(time.Unix(int64(expiresAt), 0))
 		if remaining <= 0 {
 			// Key has expired but BadgerDB hasn't reaped it yet — treat as not found.
-			ttlSecs = -2
+			ttlSecs = ttlNotFound
 			return nil
 		}
 		ttlSecs = int64(remaining.Seconds())
@@ -200,7 +197,7 @@ func (s *BadgerStore) TTL(_ context.Context, key string) (int64, error) {
 	return ttlSecs, err
 }
 
-func (s *BadgerStore) Persist(_ context.Context, key string) (bool, error) {
+func (s *BadgerStore) Persist(key string) (bool, error) {
 	var found bool
 	err := s.db.Update(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
@@ -218,7 +215,7 @@ func (s *BadgerStore) Persist(_ context.Context, key string) (bool, error) {
 	return found, err
 }
 
-func (s *BadgerStore) Info(_ context.Context) (Info, error) {
+func (s *BadgerStore) Info() (Info, error) {
 	lsm, vlog := s.db.Size()
 	return Info{
 		UsedBytes:      lsm + vlog,
@@ -241,4 +238,52 @@ func (s *BadgerStore) initEvictionIndex() error {
 		}
 		return nil
 	})
+}
+
+// runGC runs one GC pass against the value log. If a pass is already in
+// progress the call returns immediately (concurrency guard via gcRunning).
+// The loop calls RunValueLogGC until BadgerDB signals ErrNoRewrite, meaning
+// there is nothing left to compact.
+func (s *BadgerStore) runGC(ctx context.Context) {
+	if !s.gcRunning.CompareAndSwap(false, true) {
+		return
+	}
+	defer s.gcRunning.Store(false)
+
+	for ctx.Err() == nil {
+		err := s.db.RunValueLogGC(s.cfg.GCDiscardRatio)
+		if errors.Is(err, badger.ErrNoRewrite) {
+			return
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+// maintenanceLoop is the background goroutine started by NewBadgerStore.
+// It drives two triggers:
+//   - heartbeat ticker (cfg.GCInterval) — safety-net, always runs GC.
+//   - pressure ticker (cfg.GCInterval/10 or 30 s, whichever is smaller) —
+//     checks storage utilization and triggers GC when above the eviction
+//     threshold.
+func (s *BadgerStore) maintenanceLoop(ctx context.Context) {
+	heartbeat := time.NewTicker(s.cfg.GCInterval)
+	defer heartbeat.Stop()
+
+	pressureInterval := min(s.cfg.GCInterval/10, 30*time.Second)
+	pressure := time.NewTicker(pressureInterval)
+	defer pressure.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-heartbeat.C:
+			s.runGC(ctx)
+		case <-pressure.C:
+			_ = checkEviction(ctx, s)
+			s.runGC(ctx)
+		}
+	}
 }

@@ -1,15 +1,15 @@
 package config
 
 import (
-	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDefaults(t *testing.T) {
-	cfg, err := LoadConfig("")
+	cfg, err := LoadConfig()
 	require.NoError(t, err)
 	assert.Equal(t, 7946, cfg.Port)
 	assert.Equal(t, "/var/rune/data", cfg.DataDir)
@@ -20,6 +20,26 @@ func TestDefaults(t *testing.T) {
 	assert.Equal(t, 1024*1024, cfg.StreamChunkSize) // 1MB
 	assert.Equal(t, "info", cfg.LogLevel)
 	assert.Equal(t, 9090, cfg.MetricsPort)
+}
+
+func TestEnvOverrides(t *testing.T) {
+	t.Setenv("RUNE_PORT", "9000")
+	t.Setenv("RUNE_DATA_DIR", "/tmp/rune")
+	t.Setenv("RUNE_LOG_LEVEL", "debug")
+	t.Setenv("RUNE_MAX_STORAGE", "500MB")
+	t.Setenv("RUNE_EVICTION_THRESHOLD", "0.9")
+	t.Setenv("RUNE_METRICS_PORT", "9100")
+	t.Setenv("RUNE_GC_INTERVAL", "5m")
+
+	cfg, err := LoadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, 9000, cfg.Port)
+	assert.Equal(t, "/tmp/rune", cfg.DataDir)
+	assert.Equal(t, "debug", cfg.LogLevel)
+	assert.Equal(t, int64(524288000), cfg.MaxStorageBytes) // 500MB
+	assert.InDelta(t, 0.9, cfg.EvictionThreshold, 1e-9)
+	assert.Equal(t, 9100, cfg.MetricsPort)
+	assert.InDelta(t, float64(5*time.Minute), float64(cfg.GCInterval), 0)
 }
 
 func TestParseBytes(t *testing.T) {
@@ -37,25 +57,4 @@ func TestParseBytes(t *testing.T) {
 		require.NoError(t, err, "input: %s", c.input)
 		assert.Equal(t, c.want, got, "input: %s", c.input)
 	}
-}
-
-func TestEnvOverride(t *testing.T) {
-	t.Setenv("RUNE_PORT", "9000")
-	cfg, err := LoadConfig("")
-	require.NoError(t, err)
-	assert.Equal(t, 9000, cfg.Port)
-}
-
-func TestYAMLFile(t *testing.T) {
-	f, err := os.CreateTemp(t.TempDir(), "rune-config-*.yaml")
-	require.NoError(t, err)
-
-	_, err = f.WriteString("port: 8888\nlog-level: debug\n")
-	require.NoError(t, err)
-	require.NoError(t, f.Close())
-
-	cfg, err := LoadConfig(f.Name())
-	require.NoError(t, err)
-	assert.Equal(t, 8888, cfg.Port)
-	assert.Equal(t, "debug", cfg.LogLevel)
 }

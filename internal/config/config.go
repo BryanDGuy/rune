@@ -2,37 +2,50 @@ package config
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
-
-	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	LogLevel           string        `yaml:"log-level"`
-	DataDir            string        `yaml:"data-dir"`
-	MaxStorage         string        `yaml:"max-storage"`
-	EvictionAgeWeight  float64       `yaml:"eviction-age-weight"`
-	EvictionThreshold  float64       `yaml:"eviction-threshold"`
-	EvictionSizeWeight float64       `yaml:"eviction-size-weight"`
-	Port               int           `yaml:"port"`
-	StreamChunkSize    int           `yaml:"stream-chunk-size"`
-	GCInterval         time.Duration `yaml:"gc-interval"`
-	GCDiscardRatio     float64       `yaml:"gc-discard-ratio"`
-	TTLSweepInterval   time.Duration `yaml:"ttl-sweep-interval"`
-	MaxStorageBytes    int64         `yaml:"-"`
-	MetricsPort        int           `yaml:"metrics-port"`
+	LogLevel           string
+	DataDir            string
+	MaxStorageBytes    int64
+	EvictionThreshold  float64
+	EvictionSizeWeight float64
+	EvictionAgeWeight  float64
+	Port               int
+	MetricsPort        int
+	StreamChunkSize    int
+	GCInterval         time.Duration
+	GCDiscardRatio     float64
+	TTLSweepInterval   time.Duration
 }
 
-func defaults() *Config {
-	return &Config{
+// LoadConfig builds a Config from environment variables, falling back to defaults.
+//
+// Variables:
+//
+//	RUNE_PORT               (default: 7946)
+//	RUNE_METRICS_PORT       (default: 9090)
+//	RUNE_DATA_DIR           (default: /var/rune/data)
+//	RUNE_LOG_LEVEL          (default: info)
+//	RUNE_MAX_STORAGE        (default: 100GB)
+//	RUNE_EVICTION_THRESHOLD (default: 0.8)
+//	RUNE_EVICTION_SIZE_WEIGHT (default: 1.0)
+//	RUNE_EVICTION_AGE_WEIGHT  (default: 1.0)
+//	RUNE_STREAM_CHUNK_SIZE  (default: 1048576)
+//	RUNE_GC_INTERVAL        (default: 10m)
+//	RUNE_GC_DISCARD_RATIO   (default: 0.5)
+//	RUNE_TTL_SWEEP_INTERVAL (default: 60s)
+func LoadConfig() (*Config, error) {
+	cfg := &Config{
 		Port:               7946,
+		MetricsPort:        9090,
 		DataDir:            "/var/rune/data",
-		MaxStorage:         "100GB",
+		LogLevel:           "info",
+		MaxStorageBytes:    100 * 1024 * 1024 * 1024, // 100GB
 		EvictionThreshold:  0.8,
 		EvictionSizeWeight: 1.0,
 		EvictionAgeWeight:  1.0,
@@ -40,48 +53,65 @@ func defaults() *Config {
 		GCInterval:         10 * time.Minute,
 		GCDiscardRatio:     0.5,
 		TTLSweepInterval:   60 * time.Second,
-		LogLevel:           "info",
-		MetricsPort:        9090,
-	}
-}
-
-func LoadConfig(path string) (*Config, error) {
-	cfg := defaults()
-
-	if path != "" {
-		absPath, err := filepath.Abs(filepath.Clean(path))
-		if err != nil {
-			return nil, fmt.Errorf("resolve config path: %w", err)
-		}
-		data, err := fs.ReadFile(os.DirFS(filepath.Dir(absPath)), filepath.Base(absPath))
-		if err != nil {
-			return nil, fmt.Errorf("read config: %w", err)
-		}
-		if err := yaml.Unmarshal(data, cfg); err != nil {
-			return nil, fmt.Errorf("parse config: %w", err)
-		}
 	}
 
-	if cfg.MaxStorage != "" {
-		b, err := parseBytes(cfg.MaxStorage)
-		if err != nil {
-			return nil, fmt.Errorf("parse max-storage: %w", err)
-		}
-		cfg.MaxStorageBytes = b
-	}
+	var err error
 
 	if v := os.Getenv("RUNE_PORT"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
+		if cfg.Port, err = strconv.Atoi(v); err != nil {
 			return nil, fmt.Errorf("RUNE_PORT: %w", err)
 		}
-		cfg.Port = n
+	}
+	if v := os.Getenv("RUNE_METRICS_PORT"); v != "" {
+		if cfg.MetricsPort, err = strconv.Atoi(v); err != nil {
+			return nil, fmt.Errorf("RUNE_METRICS_PORT: %w", err)
+		}
 	}
 	if v := os.Getenv("RUNE_DATA_DIR"); v != "" {
 		cfg.DataDir = v
 	}
 	if v := os.Getenv("RUNE_LOG_LEVEL"); v != "" {
 		cfg.LogLevel = v
+	}
+	if v := os.Getenv("RUNE_MAX_STORAGE"); v != "" {
+		if cfg.MaxStorageBytes, err = parseBytes(v); err != nil {
+			return nil, fmt.Errorf("RUNE_MAX_STORAGE: %w", err)
+		}
+	}
+	if v := os.Getenv("RUNE_EVICTION_THRESHOLD"); v != "" {
+		if cfg.EvictionThreshold, err = strconv.ParseFloat(v, 64); err != nil {
+			return nil, fmt.Errorf("RUNE_EVICTION_THRESHOLD: %w", err)
+		}
+	}
+	if v := os.Getenv("RUNE_EVICTION_SIZE_WEIGHT"); v != "" {
+		if cfg.EvictionSizeWeight, err = strconv.ParseFloat(v, 64); err != nil {
+			return nil, fmt.Errorf("RUNE_EVICTION_SIZE_WEIGHT: %w", err)
+		}
+	}
+	if v := os.Getenv("RUNE_EVICTION_AGE_WEIGHT"); v != "" {
+		if cfg.EvictionAgeWeight, err = strconv.ParseFloat(v, 64); err != nil {
+			return nil, fmt.Errorf("RUNE_EVICTION_AGE_WEIGHT: %w", err)
+		}
+	}
+	if v := os.Getenv("RUNE_STREAM_CHUNK_SIZE"); v != "" {
+		if cfg.StreamChunkSize, err = strconv.Atoi(v); err != nil {
+			return nil, fmt.Errorf("RUNE_STREAM_CHUNK_SIZE: %w", err)
+		}
+	}
+	if v := os.Getenv("RUNE_GC_INTERVAL"); v != "" {
+		if cfg.GCInterval, err = time.ParseDuration(v); err != nil {
+			return nil, fmt.Errorf("RUNE_GC_INTERVAL: %w", err)
+		}
+	}
+	if v := os.Getenv("RUNE_GC_DISCARD_RATIO"); v != "" {
+		if cfg.GCDiscardRatio, err = strconv.ParseFloat(v, 64); err != nil {
+			return nil, fmt.Errorf("RUNE_GC_DISCARD_RATIO: %w", err)
+		}
+	}
+	if v := os.Getenv("RUNE_TTL_SWEEP_INTERVAL"); v != "" {
+		if cfg.TTLSweepInterval, err = time.ParseDuration(v); err != nil {
+			return nil, fmt.Errorf("RUNE_TTL_SWEEP_INTERVAL: %w", err)
+		}
 	}
 
 	return cfg, nil

@@ -18,7 +18,7 @@ import (
 func newTestSDKClient(t *testing.T) (*runesdk.Client, func()) {
 	t.Helper()
 	conn, cleanup := testutil.NewBufconnConn(t, 1<<20)
-	return runesdk.NewFromConn(conn), cleanup
+	return runesdk.NewClient(conn), cleanup
 }
 
 // newTestRawAndSDKClient returns both an SDK client and a raw gRPC client
@@ -26,7 +26,7 @@ func newTestSDKClient(t *testing.T) (*runesdk.Client, func()) {
 func newTestRawAndSDKClient(t *testing.T) (*runesdk.Client, runev1.RuneServiceClient, func()) {
 	t.Helper()
 	conn, cleanup := testutil.NewBufconnConn(t, 1<<20)
-	return runesdk.NewFromConn(conn), runev1.NewRuneServiceClient(conn), cleanup
+	return runesdk.NewClient(conn), runev1.NewRuneServiceClient(conn), cleanup
 }
 
 func TestSDKSetGet(t *testing.T) {
@@ -35,7 +35,7 @@ func TestSDKSetGet(t *testing.T) {
 	ctx := context.Background()
 
 	data := []byte("hello rune SDK")
-	err := client.Set(ctx, "sdk-key", bytes.NewReader(data))
+	err := client.Set(ctx, "sdk-key", bytes.NewReader(data), nil)
 	require.NoError(t, err)
 
 	rc, err := client.Get(ctx, "sdk-key")
@@ -61,7 +61,7 @@ func TestSDKWithTTL(t *testing.T) {
 	ctx := context.Background()
 
 	const ttl = 120 * time.Second
-	err := sdkClient.Set(ctx, "ttl-key", bytes.NewReader([]byte("value")), runesdk.WithTTL(ttl))
+	err := sdkClient.Set(ctx, "ttl-key", bytes.NewReader([]byte("value")), &runesdk.SetOptions{TTL: ttl})
 	require.NoError(t, err)
 
 	// Verify TTL was stored by querying the server directly.
@@ -79,7 +79,7 @@ func TestSDKLargePayload(t *testing.T) {
 	const size = 2 << 20 // 2MB
 	payload := bytes.Repeat([]byte("z"), size)
 
-	err := client.Set(ctx, "large-key", bytes.NewReader(payload))
+	err := client.Set(ctx, "large-key", bytes.NewReader(payload), nil)
 	require.NoError(t, err)
 
 	rc, err := client.Get(ctx, "large-key")

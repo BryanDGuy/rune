@@ -1,10 +1,6 @@
 package storage
 
-import (
-	"context"
-	"errors"
-	"io"
-)
+import "errors"
 
 // ErrNotFound is returned by Get and TTL when the key does not exist.
 var ErrNotFound = errors.New("key not found")
@@ -19,14 +15,14 @@ type Info struct {
 }
 
 type Storage interface {
-	Get(ctx context.Context, key string) (io.ReadCloser, error)
-	Set(ctx context.Context, key string, r io.Reader, ttlSeconds int64) error
-	Delete(ctx context.Context, keys ...string) (int64, error)
-	Exists(ctx context.Context, keys ...string) (int64, error)
-	Expire(ctx context.Context, key string, ttlSeconds int64) (bool, error)
+	Get(key string) ([]byte, error)
+	Set(key string, value []byte, ttlSeconds int64) error
+	Delete(keys ...string) (int64, error)
+	Exists(keys ...string) (int64, error)
+	Expire(key string, ttlSeconds int64) (bool, error)
 	// TTL returns remaining seconds. -1 = no TTL. -2 = not found.
-	TTL(ctx context.Context, key string) (int64, error)
-	Persist(ctx context.Context, key string) (bool, error)
-	Info(ctx context.Context) (Info, error)
+	TTL(key string) (int64, error)
+	Persist(key string) (bool, error)
+	Info() (Info, error)
 	Close() error
 }

@@ -50,7 +50,7 @@ The SDK is cluster-aware — it caches the hash ring locally and connects direct
 
 Accepts gRPC connections over HTTP/2. All value transfers use server-streaming RPCs so large blobs are chunked off disk and streamed to the client — no full in-memory buffering required.
 
-Values are read and sent in chunks of **1MB by default** (configurable via `stream-chunk-size`). This balances throughput and memory — each in-flight stream consumes at most one chunk worth of RAM on the server at a time. Below 64KB, gRPC framing overhead dominates. Above 4MB, memory pressure increases without meaningful throughput gains.
+The client streams values in chunks of **1MB by default** (configurable via `RUNE_STREAM_CHUNK_SIZE`). The server accumulates chunks and writes to BadgerDB in one operation. Below 64KB, gRPC framing overhead dominates. Above 4MB, memory pressure increases without meaningful throughput gains on reads.
 
 **Proto surface (equivalents to Redis commands):**
 
@@ -76,7 +76,7 @@ Values are read and sent in chunks of **1MB by default** (configurable via `stre
 A thin client library wrapping the generated gRPC client. Exposes idiomatic Go interfaces:
 
 ```go
-client.Set(ctx, "menu:123", reader, rune.WithTTL(10*time.Minute))
+client.Set(ctx, "menu:123", reader, &runesdk.SetOptions{TTL: 10 * time.Minute})
 reader, err := client.Get(ctx, "menu:123")
 io.Copy(dest, reader) // streams from server
 ```
@@ -140,11 +140,11 @@ Triggered when storage exceeds a configurable threshold (default: 80% of `max-st
 score = size_gb × hours_since_last_access
 ```
 
-Keys with the highest score are evicted first — naturally targeting large, cold entries and protecting small or frequently accessed ones. The weight between size and age is tunable via config:
+Keys with the highest score are evicted first — naturally targeting large, cold entries and protecting small or frequently accessed ones. The weight between size and age is tunable via env vars:
 
-```yaml
-eviction-size-weight: 1.0
-eviction-age-weight: 1.0
+```
+RUNE_EVICTION_SIZE_WEIGHT=1.0
+RUNE_EVICTION_AGE_WEIGHT=1.0
 ```
 
 A background goroutine maintains an in-memory index of `{key → (size, last_accessed)}`. Every `Get` updates `last_accessed`. Every `Set` registers the key. Every `Delete` removes it. On eviction pressure, keys are sorted by score and deleted until storage drops below the threshold.
@@ -162,9 +162,9 @@ Rune runs a background GC goroutine with two triggers:
 
 Each GC pass calls `RunValueLogGC(discardRatio)` in a loop until BadgerDB returns `ErrNoRewrite`, meaning nothing left to clean. GC is non-disruptive to reads and writes but does compete for disk I/O — only one GC pass runs at a time. If a pass is already in progress, subsequent triggers are skipped until it completes.
 
-```yaml
-gc-interval: 10m
-gc-discard-ratio: 0.5  # rewrite a value log file if >50% is stale
+```
+RUNE_GC_INTERVAL=10m
+RUNE_GC_DISCARD_RATIO=0.5  # rewrite a value log file if >50% is stale
 ```
 
 ### Cache Invalidation
@@ -172,23 +172,24 @@ Rune has no awareness of the source of truth (S3, database, etc.). When a source
 
 ## Configuration
 
-Configuration via YAML file and/or environment variables. Key settings:
+Configuration via environment variables. Key settings:
 
-```yaml
-port: 7946
-data-dir: /var/rune/data
-max-storage: 100GB
-replication-factor: 2
-eviction-threshold: 0.8
-eviction-size-weight: 1.0
-eviction-age-weight: 1.0
-stream-chunk-size: 1MB
-gc-interval: 10m
-gc-discard-ratio: 0.5
-ttl-sweep-interval: 60s
-etcd-endpoints:
-  - http://etcd:2379
-```
+| Env var                      | Default          |
+|------------------------------|------------------|
+| `RUNE_PORT`                  | `7946`           |
+| `RUNE_METRICS_PORT`          | `9090`           |
+| `RUNE_DATA_DIR`              | `/var/rune/data` |
+| `RUNE_LOG_LEVEL`             | `info`           |
+| `RUNE_MAX_STORAGE`           | `100GB`          |
+| `RUNE_EVICTION_THRESHOLD`    | `0.8`            |
+| `RUNE_EVICTION_SIZE_WEIGHT`  | `1.0`            |
+| `RUNE_EVICTION_AGE_WEIGHT`   | `1.0`            |
+| `RUNE_STREAM_CHUNK_SIZE`     | `1048576`        |
+| `RUNE_GC_INTERVAL`           | `10m`            |
+| `RUNE_GC_DISCARD_RATIO`      | `0.5`            |
+| `RUNE_TTL_SWEEP_INTERVAL`    | `60s`            |
+
+Cluster-mode settings (etcd endpoints, replication factor) are roadmap items — not yet implemented.
 
 ## Deployment
 
@@ -205,7 +206,7 @@ A DaemonSet deployment (one Rune per K8s node, localhost access) is architectura
 
 ### Binary (fallback)
 
-Single statically-linked Go binary. Config via `rune.yaml` or env vars. Single-node mode requires no etcd.
+Single statically-linked Go binary. Config via env vars. Single-node mode requires no etcd.
 
 ## Security
 
@@ -218,9 +219,9 @@ Inter-node gRPC traffic uses **mTLS with a cluster CA**. Each node is provisione
 - **Kubernetes:** Delegate auth to the service mesh (Istio/Linkerd). The sidecar handles mTLS transparently — no auth code in Rune, no cert management burden on the caller. This is the recommended production path.
 - **Standalone binary:** Optional bearer token via config. If `auth-token` is set, Rune validates it on every inbound gRPC request via metadata. Disabled by default.
 
-```yaml
+```
 # optional, standalone deployments only
-auth-token: your-secret-token
+RUNE_AUTH_TOKEN=your-secret-token
 ```
 
 TLS 1.2 minimum, TLS 1.3 preferred. `grpc.WithInsecure()` is never used in production builds.
@@ -260,9 +261,9 @@ Two gRPC health RPCs used by Kubernetes probes:
 - `Liveness` — is the process alive?
 - `Readiness` — is this node ready to serve? (BadgerDB open, etcd connected, not mid-rebalance)
 
-```yaml
-metrics-port: 9090
-log-level: info
+```
+RUNE_METRICS_PORT=9090
+RUNE_LOG_LEVEL=info
 ```
 
 ## What Rune Is Not

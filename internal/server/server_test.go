@@ -30,6 +30,20 @@ func newTestClient(t *testing.T) (runev1.RuneServiceClient, func()) {
 	return runev1.NewRuneServiceClient(conn), cleanup
 }
 
+func mustSet(t *testing.T, client runev1.RuneServiceClient, key string, value []byte, ttlSeconds int64) {
+	t.Helper()
+	s, err := client.Set(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, s.Send(&runev1.SetRequest{
+		Payload: &runev1.SetRequest_Header{Header: &runev1.SetHeader{Key: key, TtlSeconds: ttlSeconds}},
+	}))
+	require.NoError(t, s.Send(&runev1.SetRequest{
+		Payload: &runev1.SetRequest_Chunk{Chunk: value},
+	}))
+	_, err = s.CloseAndRecv()
+	require.NoError(t, err)
+}
+
 func TestPing(t *testing.T) {
 	client, cleanup := newTestClient(t)
 	defer cleanup()
@@ -122,12 +136,7 @@ func TestDelete(t *testing.T) {
 	ctx := context.Background()
 
 	for _, key := range []string{"a", "b"} {
-		s, err := client.Set(ctx)
-		require.NoError(t, err)
-		require.NoError(t, s.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Header{Header: &runev1.SetHeader{Key: key}}}))
-		require.NoError(t, s.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Chunk{Chunk: []byte("v")}}))
-		_, err = s.CloseAndRecv()
-		require.NoError(t, err)
+		mustSet(t, client, key, []byte("v"), 0)
 	}
 
 	resp, err := client.Delete(ctx, &runev1.DeleteRequest{Keys: []string{"a", "b", "missing"}})
@@ -140,12 +149,7 @@ func TestExists(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	s, err := client.Set(ctx)
-	require.NoError(t, err)
-	require.NoError(t, s.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Header{Header: &runev1.SetHeader{Key: "exists-key"}}}))
-	require.NoError(t, s.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Chunk{Chunk: []byte("v")}}))
-	_, err = s.CloseAndRecv()
-	require.NoError(t, err)
+	mustSet(t, client, "exists-key", []byte("v"), 0)
 
 	resp, err := client.Exists(ctx, &runev1.ExistsRequest{Keys: []string{"exists-key", "missing"}})
 	require.NoError(t, err)
@@ -157,12 +161,7 @@ func TestExpireAndTTL(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	s, err := client.Set(ctx)
-	require.NoError(t, err)
-	require.NoError(t, s.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Header{Header: &runev1.SetHeader{Key: "ttl-key"}}}))
-	require.NoError(t, s.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Chunk{Chunk: []byte("v")}}))
-	_, err = s.CloseAndRecv()
-	require.NoError(t, err)
+	mustSet(t, client, "ttl-key", []byte("v"), 0)
 
 	expResp, err := client.Expire(ctx, &runev1.ExpireRequest{Key: "ttl-key", TtlSeconds: 120})
 	require.NoError(t, err)
@@ -187,12 +186,7 @@ func TestPersist(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	s, err := client.Set(ctx)
-	require.NoError(t, err)
-	require.NoError(t, s.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Header{Header: &runev1.SetHeader{Key: "persist-key", TtlSeconds: 60}}}))
-	require.NoError(t, s.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Chunk{Chunk: []byte("v")}}))
-	_, err = s.CloseAndRecv()
-	require.NoError(t, err)
+	mustSet(t, client, "persist-key", []byte("v"), 60)
 
 	persistResp, err := client.Persist(ctx, &runev1.PersistRequest{Key: "persist-key"})
 	require.NoError(t, err)
@@ -208,12 +202,7 @@ func TestInfo(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	s, err := client.Set(ctx)
-	require.NoError(t, err)
-	require.NoError(t, s.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Header{Header: &runev1.SetHeader{Key: "info-key"}}}))
-	require.NoError(t, s.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Chunk{Chunk: []byte("value")}}))
-	_, err = s.CloseAndRecv()
-	require.NoError(t, err)
+	mustSet(t, client, "info-key", []byte("value"), 0)
 
 	stream, err := client.Get(ctx, &runev1.GetRequest{Key: "info-key"})
 	require.NoError(t, err)

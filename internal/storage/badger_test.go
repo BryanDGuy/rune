@@ -1,9 +1,7 @@
 package storage
 
 import (
-	"bytes"
 	"context"
-	"io"
 	"testing"
 	"time"
 
@@ -36,41 +34,38 @@ func newTestStore(t *testing.T) *BadgerStore {
 
 func TestBadgerGetNotFound(t *testing.T) {
 	s := newTestStore(t)
-	_, err := s.Get(context.Background(), "missing")
+	_, err := s.Get("missing")
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestBadgerSetGet(t *testing.T) {
 	s := newTestStore(t)
 	data := []byte("hello rune")
-	require.NoError(t, s.Set(context.Background(), "k1", bytes.NewReader(data), 0))
+	require.NoError(t, s.Set("k1", data, 0))
 
-	r, err := s.Get(context.Background(), "k1")
-	require.NoError(t, err)
-	defer r.Close()
-	got, err := io.ReadAll(r)
+	got, err := s.Get("k1")
 	require.NoError(t, err)
 	assert.Equal(t, data, got)
 }
 
 func TestBadgerDelete(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Set(context.Background(), "k1", bytes.NewReader([]byte("v")), 0))
-	require.NoError(t, s.Set(context.Background(), "k2", bytes.NewReader([]byte("v")), 0))
+	require.NoError(t, s.Set("k1", []byte("v"), 0))
+	require.NoError(t, s.Set("k2", []byte("v"), 0))
 
-	n, err := s.Delete(context.Background(), "k1", "k2", "missing")
+	n, err := s.Delete("k1", "k2", "missing")
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), n)
 
-	_, err = s.Get(context.Background(), "k1")
+	_, err = s.Get("k1")
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestBadgerExists(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Set(context.Background(), "k1", bytes.NewReader([]byte("v")), 0))
+	require.NoError(t, s.Set("k1", []byte("v"), 0))
 
-	n, err := s.Exists(context.Background(), "k1", "missing")
+	n, err := s.Exists("k1", "missing")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), n)
 }
@@ -78,59 +73,119 @@ func TestBadgerExists(t *testing.T) {
 func TestBadgerTTL(t *testing.T) {
 	s := newTestStore(t)
 
-	ttl, err := s.TTL(context.Background(), "missing")
+	ttl, err := s.TTL("missing")
 	require.NoError(t, err)
 	assert.Equal(t, int64(-2), ttl)
 
-	require.NoError(t, s.Set(context.Background(), "k1", bytes.NewReader([]byte("v")), 0))
-	ttl, err = s.TTL(context.Background(), "k1")
+	require.NoError(t, s.Set("k1", []byte("v"), 0))
+	ttl, err = s.TTL("k1")
 	require.NoError(t, err)
 	assert.Equal(t, int64(-1), ttl)
 
-	require.NoError(t, s.Set(context.Background(), "k2", bytes.NewReader([]byte("v")), 60))
-	ttl, err = s.TTL(context.Background(), "k2")
+	require.NoError(t, s.Set("k2", []byte("v"), 60))
+	ttl, err = s.TTL("k2")
 	require.NoError(t, err)
 	assert.InDelta(t, int64(60), ttl, 2)
 }
 
 func TestBadgerExpire(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Set(context.Background(), "k1", bytes.NewReader([]byte("v")), 0))
+	require.NoError(t, s.Set("k1", []byte("v"), 0))
 
-	ok, err := s.Expire(context.Background(), "k1", 120)
+	ok, err := s.Expire("k1", 120)
 	require.NoError(t, err)
 	assert.True(t, ok)
 
-	ttl, err := s.TTL(context.Background(), "k1")
+	ttl, err := s.TTL("k1")
 	require.NoError(t, err)
 	assert.InDelta(t, int64(120), ttl, 2)
 
-	ok, err = s.Expire(context.Background(), "missing", 120)
+	ok, err = s.Expire("missing", 120)
 	require.NoError(t, err)
 	assert.False(t, ok)
 }
 
 func TestBadgerPersist(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Set(context.Background(), "k1", bytes.NewReader([]byte("v")), 60))
+	require.NoError(t, s.Set("k1", []byte("v"), 60))
 
-	ok, err := s.Persist(context.Background(), "k1")
+	ok, err := s.Persist("k1")
 	require.NoError(t, err)
 	assert.True(t, ok)
 
-	ttl, err := s.TTL(context.Background(), "k1")
+	ttl, err := s.TTL("k1")
 	require.NoError(t, err)
 	assert.Equal(t, int64(-1), ttl)
 }
 
 func TestBadgerInfo(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Set(context.Background(), "k1", bytes.NewReader([]byte("value")), 0))
-	_, _ = s.Get(context.Background(), "k1")
-	_, _ = s.Get(context.Background(), "missing")
+	require.NoError(t, s.Set("k1", []byte("value"), 0))
+	_, _ = s.Get("k1")
+	_, _ = s.Get("missing")
 
-	info, err := s.Info(context.Background())
+	info, err := s.Info()
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), info.Hits)
 	assert.Equal(t, int64(1), info.Misses)
+}
+
+func newGCTestStore(t *testing.T) *BadgerStore {
+	t.Helper()
+	cfg := baseStorageTestConfig(t)
+	cfg.GCInterval = 100 * time.Millisecond
+	s, err := NewBadgerStore(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+	return s
+}
+
+func TestGCRunsOnEmptyDB(t *testing.T) {
+	s := newGCTestStore(t)
+	done := make(chan struct{})
+	go func() {
+		s.runGC(context.Background())
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("runGC on empty DB did not return within timeout")
+	}
+}
+
+func TestGCConcurrentCallsSkipped(t *testing.T) {
+	s := newGCTestStore(t)
+	s.gcRunning.Store(true)
+	defer s.gcRunning.Store(false)
+
+	done := make(chan struct{})
+	go func() {
+		s.runGC(context.Background())
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("runGC did not skip immediately when gcRunning was true")
+	}
+}
+
+func TestGCLoopStopsOnCancel(t *testing.T) {
+	s, err := NewBadgerStore(baseStorageTestConfig(t))
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.Close()
+	}()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close() did not return within timeout — maintenanceLoop may be stuck")
+	}
 }
