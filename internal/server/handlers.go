@@ -12,7 +12,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// handler implements RuneServiceServer by delegating to the storage layer.
 type handler struct {
 	runev1.UnimplementedRuneServiceServer
 	srv *Server
@@ -43,7 +42,6 @@ func (h *handler) Get(req *runev1.GetRequest, stream grpc.ServerStreamingServer[
 }
 
 func (h *handler) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, runev1.SetResponse]) error {
-	// First message must be a header with key + optional TTL.
 	first, err := stream.Recv()
 	if err != nil {
 		return err
@@ -77,7 +75,7 @@ func (h *handler) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, runev
 	return stream.SendAndClose(&runev1.SetResponse{})
 }
 
-func (h *handler) Delete(ctx context.Context, req *runev1.DeleteRequest) (*runev1.DeleteResponse, error) {
+func (h *handler) Delete(_ context.Context, req *runev1.DeleteRequest) (*runev1.DeleteResponse, error) {
 	n, err := h.srv.store.Delete(req.Keys...)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "delete: %v", err)
@@ -85,7 +83,7 @@ func (h *handler) Delete(ctx context.Context, req *runev1.DeleteRequest) (*runev
 	return &runev1.DeleteResponse{Deleted: n}, nil
 }
 
-func (h *handler) Exists(ctx context.Context, req *runev1.ExistsRequest) (*runev1.ExistsResponse, error) {
+func (h *handler) Exists(_ context.Context, req *runev1.ExistsRequest) (*runev1.ExistsResponse, error) {
 	n, err := h.srv.store.Exists(req.Keys...)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "exists: %v", err)
@@ -93,7 +91,7 @@ func (h *handler) Exists(ctx context.Context, req *runev1.ExistsRequest) (*runev
 	return &runev1.ExistsResponse{Count: n}, nil
 }
 
-func (h *handler) Expire(ctx context.Context, req *runev1.ExpireRequest) (*runev1.ExpireResponse, error) {
+func (h *handler) Expire(_ context.Context, req *runev1.ExpireRequest) (*runev1.ExpireResponse, error) {
 	if req.TtlSeconds <= 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "ttl_seconds must be positive, got %d", req.TtlSeconds)
 	}
@@ -104,7 +102,7 @@ func (h *handler) Expire(ctx context.Context, req *runev1.ExpireRequest) (*runev
 	return &runev1.ExpireResponse{Ok: ok}, nil
 }
 
-func (h *handler) TTL(ctx context.Context, req *runev1.TTLRequest) (*runev1.TTLResponse, error) {
+func (h *handler) TTL(_ context.Context, req *runev1.TTLRequest) (*runev1.TTLResponse, error) {
 	ttl, err := h.srv.store.TTL(req.Key)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "ttl: %v", err)
@@ -112,7 +110,7 @@ func (h *handler) TTL(ctx context.Context, req *runev1.TTLRequest) (*runev1.TTLR
 	return &runev1.TTLResponse{TtlSeconds: ttl}, nil
 }
 
-func (h *handler) Persist(ctx context.Context, req *runev1.PersistRequest) (*runev1.PersistResponse, error) {
+func (h *handler) Persist(_ context.Context, req *runev1.PersistRequest) (*runev1.PersistResponse, error) {
 	ok, err := h.srv.store.Persist(req.Key)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "persist: %v", err)
@@ -120,7 +118,7 @@ func (h *handler) Persist(ctx context.Context, req *runev1.PersistRequest) (*run
 	return &runev1.PersistResponse{Ok: ok}, nil
 }
 
-func (h *handler) Info(ctx context.Context, _ *runev1.InfoRequest) (*runev1.InfoResponse, error) {
+func (h *handler) Info(_ context.Context, _ *runev1.InfoRequest) (*runev1.InfoResponse, error) {
 	info, err := h.srv.store.Info()
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "info: %v", err)
