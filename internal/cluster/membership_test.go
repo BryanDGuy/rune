@@ -168,3 +168,24 @@ func TestMembershipStopRevokesLease(t *testing.T) {
 	m.Stop()
 	assert.Empty(t, store.leases, "lease should be revoked on Stop")
 }
+
+func TestIntegrationRingUpdatesOnNodeLeave(t *testing.T) {
+	// Pre-populate store with two nodes so the ring starts with both.
+	store := newFakeStore()
+	info1, _ := json.Marshal(NodeInfo{ID: "node-1", Addr: "host1:7946"})
+	info2, _ := json.Marshal(NodeInfo{ID: "node-2", Addr: "host2:7946"})
+	store.kvs[nodePrefix+"node-1"] = string(info1)
+	store.kvs[nodePrefix+"node-2"] = string(info2)
+
+	m := newWithStore(store, "node-1", "host1:7946")
+	require.NoError(t, m.Start(t.Context()))
+	defer m.Stop()
+
+	require.Equal(t, 2, m.Ring().Len())
+
+	store.simulateNodeLeave("node-2")
+
+	assert.Eventually(t, func() bool {
+		return m.Ring().Len() == 1
+	}, time.Second, 10*time.Millisecond, "ring should remove departed node within 1s")
+}
