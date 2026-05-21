@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -127,4 +128,64 @@ func TestBadgerInfo(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), info.Hits)
 	assert.Equal(t, int64(1), info.Misses)
+}
+
+func newGCTestStore(t *testing.T) *BadgerStore {
+	t.Helper()
+	cfg := baseStorageTestConfig(t)
+	cfg.GCInterval = 100 * time.Millisecond
+	s, err := NewBadgerStore(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+	return s
+}
+
+func TestGCRunsOnEmptyDB(t *testing.T) {
+	s := newGCTestStore(t)
+	done := make(chan struct{})
+	go func() {
+		s.runGC(context.Background())
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("runGC on empty DB did not return within timeout")
+	}
+}
+
+func TestGCConcurrentCallsSkipped(t *testing.T) {
+	s := newGCTestStore(t)
+	s.gcRunning.Store(true)
+	defer s.gcRunning.Store(false)
+
+	done := make(chan struct{})
+	go func() {
+		s.runGC(context.Background())
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("runGC did not skip immediately when gcRunning was true")
+	}
+}
+
+func TestGCLoopStopsOnCancel(t *testing.T) {
+	s, err := NewBadgerStore(baseStorageTestConfig(t))
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.Close()
+	}()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close() did not return within timeout — maintenanceLoop may be stuck")
+	}
 }
