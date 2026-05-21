@@ -1,5 +1,7 @@
 # Rune
 
+> **Not production ready.** Rune is under active development. APIs may change without notice and there are no stability guarantees yet.
+
 A shared cache built for large files — stream blobs of any size across pods the way Redis streams strings.
 
 ## Why
@@ -12,6 +14,8 @@ Because Rune's interface is gRPC, it also makes BadgerDB's large-value storage a
 
 Each Rune node is a gRPC server backed by an embedded BadgerDB instance. Clients use the Go SDK (additional language SDKs follow from the proto definition) and stream values in chunks — callers get an `io.Reader` back from `Get`, so processing can begin before the full value has transferred.
 
+**Single-node mode** — no external dependencies:
+
 ```
 Pods (Go SDK / future SDKs)
         │ gRPC + HTTP/2 streaming
@@ -23,7 +27,21 @@ Pods (Go SDK / future SDKs)
 └─────────────────────────────┘
 ```
 
-Cluster mode (consistent hashing, replication, etcd coordination) is on the roadmap. The current release is single-node.
+**Cluster mode** — multiple nodes coordinated via etcd, consistent hashing routes each key to its owning node. A node that receives a misrouted request forwards it transparently. The SDK's `ClusterClient` watches etcd and routes directly to the owning node without a server-side hop.
+
+```
+Pods (ClusterClient)
+        │ routes directly to owning node
+        ▼
+┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+│   Rune-0     │──▶│   Rune-1     │──▶│   Rune-2     │
+│  BadgerDB    │   │  BadgerDB    │   │  BadgerDB    │
+└──────┬───────┘   └──────┬───────┘   └──────┬───────┘
+       └──────────────────┴──────────────────┘
+                       etcd
+```
+
+Replication and lazy key migration across nodes are on the roadmap.
 
 ## Quick start
 
@@ -39,6 +57,8 @@ RUNE_PORT=8080 RUNE_DATA_DIR=/tmp/rune ./rune
 ```
 
 ## Go SDK
+
+**Single-node:**
 
 ```go
 import (
@@ -67,6 +87,20 @@ defer r.Close()
 io.Copy(dest, r) // stream to destination without buffering the full value
 ```
 
+**Cluster mode** (requires etcd):
+
+```go
+etcdClient, err := clientv3.New(clientv3.Config{Endpoints: []string{"etcd:2379"}})
+if err != nil { ... }
+
+client, err := runesdk.NewClusterClient(etcdClient, "")
+if err != nil { ... }
+defer client.Close()
+
+// Same Set/Get interface — ClusterClient routes to the correct node automatically
+err = client.Set(ctx, "menu:123", file, nil)
+```
+
 ## Configuration
 
 All configuration is via environment variables. All settings have sensible defaults.
@@ -84,7 +118,9 @@ All configuration is via environment variables. All settings have sensible defau
 | `RUNE_STREAM_CHUNK_SIZE`     | `1048576`        | gRPC stream chunk size in bytes      |
 | `RUNE_GC_INTERVAL`           | `10m`            | BadgerDB value log GC interval       |
 | `RUNE_GC_DISCARD_RATIO`      | `0.5`            | GC discard ratio (0–1)               |
-| `RUNE_TTL_SWEEP_INTERVAL`    | `60s`            | TTL expiry sweep interval            |
+| `RUNE_ETCD_ENDPOINTS`        | _(empty)_        | Comma-separated etcd endpoints; empty = single-node mode |
+| `RUNE_NODE_ID`               | hostname         | Stable identity for this node in the ring |
+| `RUNE_NODE_ADDR`             | `localhost:{RUNE_PORT}` | Advertised address peers use to reach this node |
 
 ## Health checks
 
