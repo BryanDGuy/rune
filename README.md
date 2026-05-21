@@ -14,32 +14,34 @@ Because Rune's interface is gRPC, it also makes BadgerDB's large-value storage a
 
 Each Rune node is a gRPC server backed by an embedded BadgerDB instance. Clients use the Go SDK (additional language SDKs follow from the proto definition) and stream values in chunks — callers get an `io.Reader` back from `Get`, so processing can begin before the full value has transferred.
 
-**Single-node mode** — no external dependencies:
-
 ```
 Pods (Go SDK / future SDKs)
         │ gRPC + HTTP/2 streaming
         ▼
-┌─────────────────────────────┐
-│         Rune Node           │
-│  gRPC Server → BadgerDB     │
-│  Eviction + Value Log GC    │
-└─────────────────────────────┘
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Rune Node A   │     │   Rune Node B   │     │   Rune Node C   │
+│  ┌───────────┐  │     │  ┌───────────┐  │     │  ┌───────────┐  │
+│  │   gRPC    │  │     │  │   gRPC    │  │     │  │   gRPC    │  │
+│  │  Server   │  │     │  │  Server   │  │     │  │  Server   │  │
+│  └─────┬─────┘  │     │  └─────┬─────┘  │     │  └─────┬─────┘  │
+│  ┌─────▼─────┐  │     │  ┌─────▼─────┐  │     │  ┌─────▼─────┐  │
+│  │  Router   │  │     │  │  Router   │  │     │  │  Router   │  │
+│  └─────┬─────┘  │     │  └─────┬─────┘  │     │  └─────┬─────┘  │
+│  ┌─────▼─────┐  │     │  ┌─────▼─────┐  │     │  ┌─────▼─────┐  │
+│  │  BadgerDB │  │     │  │  BadgerDB │  │     │  │  BadgerDB │  │
+│  └───────────┘  │     │  └───────────┘  │     │  └───────────┘  │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+        │                       │                       │
+        └───────────────────────┼───────────────────────┘
+                                │
+                          ┌─────▼─────┐
+                          │   etcd    │
+                          │ (cluster  │
+                          │  coord)   │
+                          └───────────┘
 ```
 
-**Cluster mode** — multiple nodes coordinated via etcd, consistent hashing routes each key to its owning node. A node that receives a misrouted request forwards it transparently. The SDK's `ClusterClient` watches etcd and routes directly to the owning node without a server-side hop.
-
-```
-Pods (ClusterClient)
-        │ routes directly to owning node
-        ▼
-┌──────────────┐   ┌──────────────┐   ┌──────────────┐
-│   Rune-0     │──▶│   Rune-1     │──▶│   Rune-2     │
-│  BadgerDB    │   │  BadgerDB    │   │  BadgerDB    │
-└──────┬───────┘   └──────┬───────┘   └──────┬───────┘
-       └──────────────────┴──────────────────┘
-                       etcd
-```
+Single-node mode requires no etcd — just run one node. In cluster mode, set `RUNE_ETCD_ENDPOINTS` and each node registers itself, watches for peers, and routes misrouted requests to the owning node. The SDK's `ClusterClient` watches etcd and routes directly to the owning node, skipping the server-side hop entirely.
 
 Replication and lazy key migration across nodes are on the roadmap.
 
