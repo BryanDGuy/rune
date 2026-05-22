@@ -57,6 +57,24 @@ func TestEvictionWeightedScoreWeights(t *testing.T) {
 	assert.InDelta(t, 6.0, score3, 0.001)
 }
 
+// TestRecordExistingIsCold verifies that keys restored at startup are treated as
+// cold (epoch last-access) so eviction reclaims by size first, whereas freshly
+// written keys (recordSet) are warm.
+func TestRecordExistingIsCold(t *testing.T) {
+	idx := newEvictionIndex()
+	idx.recordSet("fresh", 1*1024*1024)
+	idx.recordExisting("restored", 1*1024*1024)
+
+	restored := idx.entries["restored"]
+	assert.Equal(t, int64(0), restored.lastAccessedNano.Load(), "restored key should have epoch last-access")
+
+	now := time.Now()
+	assert.Greater(t,
+		weightedScore(restored, 1.0, 1.0, now),
+		weightedScore(idx.entries["fresh"], 1.0, 1.0, now),
+		"restored (cold) keys should outrank freshly-set (warm) keys for eviction")
+}
+
 // newEvictionTestStore creates a BadgerStore with a very small MaxStorageBytes
 // to make eviction easy to trigger in tests.
 func newEvictionTestStore(t *testing.T, maxBytes int64) *BadgerStore {

@@ -69,33 +69,6 @@ func (r *Router) Lookup(key string) (Node, error) {
 	return r.nodes[m.String()], nil
 }
 
-// LookupN returns up to n nodes in ring order (primary first). Returns fewer
-// than n without error if the ring has fewer members. Returns ErrNoNodes if empty.
-func (r *Router) LookupN(key string, n int) ([]Node, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	if len(r.nodes) == 0 {
-		return nil, ErrNoNodes
-	}
-
-	count := min(n, len(r.nodes))
-
-	// ErrInsufficientMemberCount from the library is unreachable here:
-	// count was capped to len(r.nodes) which is kept in sync with the
-	// library's member map under the same write lock.
-	members, err := r.ring.GetClosestN([]byte(key), count)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]Node, len(members))
-	for i, m := range members {
-		result[i] = r.nodes[m.String()]
-	}
-	return result, nil
-}
-
 func (r *Router) Len() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

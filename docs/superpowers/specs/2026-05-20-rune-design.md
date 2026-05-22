@@ -51,7 +51,7 @@ The **server** does hold each value fully in RAM during a Get or Set. This is an
 
 The client streams values in chunks of **1MB by default** (configurable via `RUNE_STREAM_CHUNK_SIZE`). The server accumulates chunks and writes to BadgerDB in one operation. Below 64KB, gRPC framing overhead dominates. Above 4MB, memory pressure increases without meaningful throughput gains on reads.
 
-**Proto surface (equivalents to Redis commands):**
+**Proto surface:**
 
 | RPC | Notes |
 |-----|-------|
@@ -60,12 +60,7 @@ The client streams values in chunks of **1MB by default** (configurable via `RUN
 | `Set` | Client-streaming: caller streams value chunks to server |
 | `Delete` | Delete one or more keys |
 | `Exists` | Check key existence |
-| `Keys` | Server-streaming: stream keys matching a pattern |
-| `Scan` | Cursor-based key iteration |
-| `MGet` | Bulk fetch (streaming per value) |
-| `MSet` | Bulk store (streaming per value) |
 | `Info` | Server stats (hit rate, storage, connections) |
-| `Flush` | Clear all keys on the node |
 
 ### 1a. Go SDK
 
@@ -81,51 +76,45 @@ Additional language SDKs (Python, Node, Rust) follow the same pattern via genera
 
 ### 2. Router
 
-Determines key ownership using consistent hashing. Default replication factor: 2.
+Determines key ownership using consistent hashing.
 
 **Node identity:** Each node carries a stable `ID` (used for ring placement) and an `Addr` (host:port used for dialing). These are kept separate so a node can change its network address (e.g., pod restart with a new IP) without shifting its position on the hash ring and triggering unnecessary key remapping.
 
-**Virtual nodes:** The ring uses 20 virtual nodes (vnodes) per physical node across 271 partitions (`PartitionCount: 271`, a prime). Note: `ReplicationFactor: 20` in `buraksezer/consistent` controls the vnode count, not the data replication factor. Without vnodes, a small cluster (3–5 nodes) produces uneven ring slices and skewed load. 20 vnodes per node provides uniform distribution without meaningful memory overhead.
+**Virtual nodes:** The ring uses 20 virtual nodes (vnodes) per physical node across 271 partitions (`PartitionCount: 271`, a prime). Note: `ReplicationFactor: 20` in `buraksezer/consistent` controls the vnode count — it is not data replication; Rune stores a single copy of each key. Without vnodes, a small cluster (3–5 nodes) produces uneven ring slices and skewed load. 20 vnodes per node provides uniform distribution without meaningful memory overhead.
 
-Replication exists purely for **availability** — if one node goes down, the key is still readable from the second replica without a cache miss. Rune makes no durability guarantees; the source of truth always lives outside Rune (S3, database, etc.). A cache miss is an expected and acceptable failure mode.
+Rune stores a **single copy** of each key, on its owning node — there are no replicas. Rune makes no durability guarantees; the source of truth always lives outside Rune (S3, database, etc.). If a node goes down, the keys it owned become cache misses until callers refetch them from source — an expected and acceptable failure mode for a cache.
 
 **Write path:**
-1. SDK hashes the key locally, connects directly to the primary owning node
-2. Primary stores the value in BadgerDB and returns success immediately
-3. Primary replicates async to the secondary node in the background
+1. The SDK hashes the key locally and connects directly to the owning node
+2. The owner stores the value in BadgerDB and returns success
 
 **Read path:**
-1. SDK hashes the key locally, connects directly to the primary owning node
-2. If the primary is unavailable, SDK falls back to the secondary replica
-3. If both are unavailable, the SDK returns a cache miss — caller fetches from source
+1. The SDK hashes the key locally and connects directly to the owning node
+2. If the owner is unavailable, the SDK returns a cache miss — the caller fetches from source
 
-**Replica placement** is computed, not stored. Given a key and the current hash ring, the primary is the first node clockwise from the key's hash position. The secondary replica is the next node clockwise. Any node — and the SDK itself — can independently compute both locations from just the key and the ring. No per-key tracking in etcd is needed.
+**Owner placement** is computed, not stored. Given a key and the current hash ring, the owner is the first node clockwise from the key's hash position. Any node — and the SDK itself — can compute it from just the key and the ring. No per-key tracking in etcd is needed.
 
 **Direct (non-SDK) clients:** Because the proto is language-agnostic, clients can be generated in any language and call Rune without the cluster-aware SDK. Such a client may connect to any node; if that node does not own the requested key, it forwards the request to the owner and relays the response back, so results are correct regardless of entry point — at the cost of one extra hop. To let thin clients route directly and skip that hop, every Get/Set response carries an `x-rune-owner` header set to the owning node's advertised address. A client caches `key → address` and connects to the owner itself next time, gaining owner-aware routing without watching etcd or reimplementing the ring. Stale hints self-correct: the entry node forwards again and returns an updated `x-rune-owner`. A loop marker (`x-rune-forwarded`) ensures a forwarded request is served locally and never re-forwarded.
 
 etcd stores **node registrations** (ID + address) under `/rune/nodes/{nodeID}`. Each node builds and maintains its local ring from those registrations via an etcd watch — the ring itself is never stored in etcd. All routing decisions are made locally from that cached ring — no etcd round-trip per request.
 
-**Rebalance on node join/leave** uses lazy migration — data is not eagerly moved when the ring changes. When a key's hash position maps to a new owner but the data hasn't migrated yet, the new owner asks the previous owner for the value, serves it to the caller, and stores a local copy. The previous owner's copy expires naturally via TTL or eviction pressure. Data drifts to the correct node over time without any bulk transfer.
+**Membership changes re-warm on demand.** When a node joins or leaves, the ring recomputes and some keys map to a new owner. Rune does not move data between nodes: the new owner simply doesn't hold those keys yet, so the next read is a cache miss and the caller refetches from source, repopulating the new owner. The previous owner's now-orphaned copy expires via TTL or eviction pressure. The cache re-warms without any bulk transfer.
 
-This approach is safe for a cache because:
-- Temporary inconsistency in key location is acceptable — callers always get a value or a cache miss, never an error
-- Eagerly migrating large blobs on every topology change would be operationally expensive and disruptive
+This is safe for a cache because:
+- Callers always get a value or a cache miss, never an error, so a key briefly living on the "wrong" node — or nowhere yet — is fine
+- Eagerly moving large blobs on every topology change would be operationally expensive and disruptive
 - In-flight streams always complete on the node that started them — no mid-stream redirects needed
 
 ### 3. Storage Engine
 
 BadgerDB embedded in each Rune process. BadgerDB's WiscKey-inspired design stores keys in an LSM tree and values in a separate append-only value log — this avoids write amplification for large values and scales to arbitrary value sizes bounded only by disk.
 
-**TTL updates re-read the full value.** `Expire` and `Persist` must read the blob out of BadgerDB and write it back with updated metadata — there is no API to update TTL in place. On large values this is an expensive operation; callers should treat TTL updates as a full read+write cycle in their cost model.
-
 **Eviction:** TTL (optional, caller-set) + weighted score eviction under storage pressure. See Eviction Details section.
 
 ### 4. Cluster Coordinator
 
 etcd handles:
-- **Membership** — nodes register on startup with a lease + keepalive; lease expiry removes crashed nodes automatically; clean shutdown revokes the lease immediately. All nodes watch the membership prefix and update their local ring on any change.
-- **Leader election** — one node elected coordinator for rebalance operations
-- **Rebalance** — triggered by membership changes, coordinated by the elected leader
+- **Membership** — nodes register on startup with a lease + keepalive; lease expiry removes crashed nodes automatically; clean shutdown revokes the lease immediately. All nodes watch the membership prefix and update their local ring on any change. Ring updates are local and need no coordination — there is no leader and no data movement to orchestrate.
 
 Rune does not implement its own consensus. etcd is a required dependency for cluster mode. Single-node mode (no etcd) is supported for local dev.
 
@@ -134,7 +123,7 @@ Rune does not implement its own consensus. etcd is a required dependency for clu
 Rune uses two independent eviction mechanisms that coexist:
 
 ### TTL Expiry
-Handled natively by BadgerDB. Callers optionally set a TTL at write time. Expired keys are collected lazily on access and by a background sweep every 60s (configurable). TTL is optional — the expected usage pattern is long-lived entries that persist until explicitly deleted or evicted under storage pressure.
+Handled natively by BadgerDB. Callers optionally set a TTL at write time. Expired entries are skipped on read and their space is reclaimed during BadgerDB's value-log GC. TTL is optional — the expected usage pattern is long-lived entries that persist until explicitly deleted or evicted under storage pressure.
 
 ### Storage Pressure Eviction (Weighted Score)
 Triggered when storage exceeds a configurable threshold (default: 80% of `max-storage`). Rune evicts keys by weighted score:
@@ -152,7 +141,7 @@ RUNE_EVICTION_AGE_WEIGHT=1.0
 
 A background goroutine maintains an in-memory index of `{key → (size, last_accessed)}`. Every `Get` updates `last_accessed`. Every `Set` registers the key. Every `Delete` removes it. On eviction pressure, keys are sorted by score and deleted until storage drops below the threshold.
 
-The index is in-memory and does not survive restarts. On restart, `last_accessed` is treated as zero (epoch) for all existing keys — meaning the first eviction pass after a restart will treat all existing keys as cold. This is acceptable for a cache.
+The index is in-memory and not persisted. On restart it is rebuilt by scanning BadgerDB's existing keys, but real access history is lost — each key's `last_accessed` is set to zero (epoch), so the first eviction pass after a restart treats all restored keys as cold and reclaims the largest first. This is acceptable for a cache.
 
 ### BadgerDB Value Log GC
 
@@ -229,20 +218,6 @@ RUNE_AUTH_TOKEN=your-secret-token
 
 TLS 1.2 minimum, TLS 1.3 preferred. `grpc.WithInsecure()` is never used in production builds.
 
-## Bulk Operations
-
-`MGet` and `MSet` operate across multiple keys that may live on different nodes.
-
-**Partial failure behavior:** if one or more keys live on an unavailable node, `MGet` returns partial results — available keys are returned normally, unavailable keys are returned as `nil` (cache miss). The caller treats `nil` as a cache miss and fetches from source. An error is only returned for actual transport failures, not cache misses.
-
-```go
-results, err := client.MGet(ctx, "menu:1", "menu:2", "menu:3")
-// err != nil only for transport failures
-// results["menu:2"] == nil means cache miss — fetch from source
-```
-
-`MSet` follows the same pattern — keys that cannot be written due to node unavailability are silently skipped. The cache will self-heal on the next write once the node recovers.
-
 ## Observability
 
 ### Structured Logging
@@ -251,7 +226,7 @@ JSON logs via `log/slog`: the standard `time`/`level`/`msg` plus structured attr
 ### Health Checks
 Two gRPC health RPCs used by Kubernetes probes:
 - `Liveness` — is the process alive?
-- `Readiness` — is this node ready to serve? (BadgerDB open, etcd connected, not mid-rebalance)
+- `Readiness` — is this node ready to serve? (BadgerDB open, etcd connected)
 
 ```
 RUNE_LOG_LEVEL=info

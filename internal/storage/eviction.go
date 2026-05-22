@@ -34,6 +34,16 @@ func (e *evictionIndex) recordSet(key string, size int64) {
 	e.entries[key] = entry
 }
 
+// recordExisting registers a key found during the startup index rebuild. Its
+// last-accessed time is left at zero (epoch) so the first post-restart eviction
+// treats restored keys as cold and reclaims by size first — real access history
+// is gone, so freshness can't be assumed.
+func (e *evictionIndex) recordExisting(key string, size int64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.entries[key] = &evictionEntry{size: size}
+}
+
 func (e *evictionIndex) recordAccess(key string) {
 	e.mu.RLock()
 	entry, ok := e.entries[key]
