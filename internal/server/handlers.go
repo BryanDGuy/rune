@@ -13,18 +13,22 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const metaForwarded = "x-rune-forwarded"
+const (
+	metaForwarded = "x-rune-forwarded"
+	metaOwner     = "x-rune-owner"
+)
 
 type handler struct {
 	runev1.UnimplementedRuneServiceServer
 	srv *Server
 }
 
-// forwardTarget reports the peer a request for key should be forwarded to.
-// ok is false when this node serves the request itself: cluster mode is off,
-// the request was already forwarded once (loop guard), this node owns the key,
-// or the ring lookup failed (degrade to serving locally).
-func (h *handler) forwardTarget(ctx context.Context, key string) (addr string, ok bool) {
+// owner reports the advertised address of the node that owns key (the client's
+// routing hint) and whether that owner is a remote peer, in which case the
+// request must be forwarded. addr is empty when ownership can't be resolved
+// here: single-node mode, an already-forwarded request (we are not the
+// client-facing node), or an empty ring.
+func (h *handler) owner(ctx context.Context, key string) (addr string, remote bool) {
 	if !h.srv.clusterMode() {
 		return "", false
 	}
@@ -32,10 +36,18 @@ func (h *handler) forwardTarget(ctx context.Context, key string) (addr string, o
 		return "", false
 	}
 	node, err := h.srv.membership.Ring().Lookup(key)
-	if err != nil || node.ID == h.srv.membership.NodeID() {
+	if err != nil {
 		return "", false
 	}
-	return node.Addr, true
+	return node.Addr, node.ID != h.srv.membership.NodeID()
+}
+
+// setOwnerHint advertises the owning node's address so a direct gRPC client can
+// cache key→node and route there itself, skipping the forwarding hop next time.
+func setOwnerHint(stream grpc.ServerStream, addr string) {
+	if addr != "" {
+		_ = stream.SetHeader(metadata.Pairs(metaOwner, addr))
+	}
 }
 
 func forwardCtx(ctx context.Context) context.Context {
@@ -47,7 +59,9 @@ func (h *handler) Ping(_ context.Context, _ *runev1.PingRequest) (*runev1.PingRe
 }
 
 func (h *handler) Get(req *runev1.GetRequest, stream grpc.ServerStreamingServer[runev1.GetResponse]) error {
-	if addr, ok := h.forwardTarget(stream.Context(), req.Key); ok {
+	addr, remote := h.owner(stream.Context(), req.Key)
+	setOwnerHint(stream, addr)
+	if remote {
 		return h.forwardGet(stream.Context(), addr, req, stream)
 	}
 	value, err := h.srv.store.Get(req.Key)
@@ -110,7 +124,9 @@ func (h *handler) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, runev
 		return status.Error(codes.InvalidArgument, "first message must contain SetHeader")
 	}
 
-	if addr, ok := h.forwardTarget(stream.Context(), hdr.Key); ok {
+	addr, remote := h.owner(stream.Context(), hdr.Key)
+	setOwnerHint(stream, addr)
+	if remote {
 		return h.forwardSet(stream.Context(), addr, hdr, stream)
 	}
 

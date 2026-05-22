@@ -31,12 +31,12 @@ func newTestClient(t *testing.T) (runev1.RuneServiceClient, func()) {
 	return runev1.NewRuneServiceClient(conn), cleanup
 }
 
-func mustSet(t *testing.T, client runev1.RuneServiceClient, key string, value []byte, ttlSeconds int64) {
+func mustSet(t *testing.T, client runev1.RuneServiceClient, key string, value []byte) {
 	t.Helper()
 	s, err := client.Set(context.Background())
 	require.NoError(t, err)
 	require.NoError(t, s.Send(&runev1.SetRequest{
-		Payload: &runev1.SetRequest_Header{Header: &runev1.SetHeader{Key: key, TtlSeconds: ttlSeconds}},
+		Payload: &runev1.SetRequest_Header{Header: &runev1.SetHeader{Key: key}},
 	}))
 	require.NoError(t, s.Send(&runev1.SetRequest{
 		Payload: &runev1.SetRequest_Chunk{Chunk: value},
@@ -137,7 +137,7 @@ func TestDelete(t *testing.T) {
 	ctx := context.Background()
 
 	for _, key := range []string{"a", "b"} {
-		mustSet(t, client, key, []byte("v"), 0)
+		mustSet(t, client, key, []byte("v"))
 	}
 
 	resp, err := client.Delete(ctx, &runev1.DeleteRequest{Keys: []string{"a", "b", "missing"}})
@@ -150,7 +150,7 @@ func TestExists(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	mustSet(t, client, "exists-key", []byte("v"), 0)
+	mustSet(t, client, "exists-key", []byte("v"))
 
 	resp, err := client.Exists(ctx, &runev1.ExistsRequest{Keys: []string{"exists-key", "missing"}})
 	require.NoError(t, err)
@@ -162,7 +162,7 @@ func TestInfo(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	mustSet(t, client, "info-key", []byte("value"), 0)
+	mustSet(t, client, "info-key", []byte("value"))
 
 	stream, err := client.Get(ctx, &runev1.GetRequest{Key: "info-key"})
 	require.NoError(t, err)
@@ -254,6 +254,49 @@ func TestForwardingSet(t *testing.T) {
 		got = append(got, resp.Chunk...)
 	}
 	assert.Equal(t, []byte("written-via-node1"), got)
+}
+
+func TestOwnerHintForwarding(t *testing.T) {
+	conn2, cleanup2 := testutil.NewBufconnConn(t, bufSize)
+	defer cleanup2()
+	mustSet(t, runev1.NewRuneServiceClient(conn2), "fwd-key", []byte("v"))
+
+	conn1, cleanup1 := testutil.NewBufconnConnWithForwarding(t, bufSize, conn2)
+	defer cleanup1()
+
+	getStream, err := runev1.NewRuneServiceClient(conn1).Get(context.Background(), &runev1.GetRequest{Key: "fwd-key"})
+	require.NoError(t, err)
+	for {
+		_, err = getStream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+	}
+
+	md, err := getStream.Header()
+	require.NoError(t, err)
+	assert.Equal(t, []string{conn2.Target()}, md.Get("x-rune-owner"), "client should be told the owning node's address")
+}
+
+func TestOwnerHintAbsentSingleNode(t *testing.T) {
+	client, cleanup := newTestClient(t)
+	defer cleanup()
+	mustSet(t, client, "k", []byte("v"))
+
+	getStream, err := client.Get(context.Background(), &runev1.GetRequest{Key: "k"})
+	require.NoError(t, err)
+	for {
+		_, err = getStream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+	}
+
+	md, err := getStream.Header()
+	require.NoError(t, err)
+	assert.Empty(t, md.Get("x-rune-owner"), "single-node mode has no owner to hint")
 }
 
 func TestLargePayload(t *testing.T) {
