@@ -69,7 +69,7 @@ if err != nil { ... }
 client := runesdk.NewClient(conn)
 defer client.Close()
 
-// Store a value (any io.Reader, any size)
+// Store a value
 err = client.Set(ctx, "menu:123", file, nil)
 
 // Store with TTL
@@ -134,8 +134,8 @@ Rune registers the standard [gRPC Health Checking Protocol](https://github.com/g
 
 | Service | Meaning |
 |---------|---------|
-| `""` (empty) | Liveness — process is alive |
-| `"rune"` | Readiness — node is ready to serve |
+| `""` (empty) | Liveness — process is alive (always SERVING) |
+| `"rune"` | Readiness — currently always SERVING |
 
 ## What Rune is not
 
