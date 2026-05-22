@@ -1,6 +1,13 @@
 {
   "permissions": {
     "allow": [
+      "Bash(go *)",
+      "Bash(make *)",
+      "Bash(gofmt *)",
+      "Bash(gofumpt *)",
+      "Bash(golangci-lint *)",
+      "Bash(protoc *)",
+      "Bash(docker compose *)",
       "Bash(git *)",
       "WebSearch(*)",
       "WebFetch(*)"
