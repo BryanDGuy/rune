@@ -158,7 +158,7 @@ func (s *BadgerStore) initEvictionIndex() error {
 		defer it.Close()
 		for it.Rewind(); it.Valid(); it.Next() {
 			item := it.Item()
-			s.eviction.recordSet(string(item.KeyCopy(nil)), item.EstimatedSize())
+			s.eviction.recordExisting(string(item.KeyCopy(nil)), item.EstimatedSize())
 		}
 		return nil
 	})

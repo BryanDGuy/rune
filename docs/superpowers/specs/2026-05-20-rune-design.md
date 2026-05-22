@@ -141,7 +141,7 @@ RUNE_EVICTION_AGE_WEIGHT=1.0
 
 A background goroutine maintains an in-memory index of `{key → (size, last_accessed)}`. Every `Get` updates `last_accessed`. Every `Set` registers the key. Every `Delete` removes it. On eviction pressure, keys are sorted by score and deleted until storage drops below the threshold.
 
-The index is in-memory and does not survive restarts. On restart, `last_accessed` is treated as zero (epoch) for all existing keys — meaning the first eviction pass after a restart will treat all existing keys as cold. This is acceptable for a cache.
+The index is in-memory and not persisted. On restart it is rebuilt by scanning BadgerDB's existing keys, but real access history is lost — each key's `last_accessed` is set to zero (epoch), so the first eviction pass after a restart treats all restored keys as cold and reclaims the largest first. This is acceptable for a cache.
 
 ### BadgerDB Value Log GC
 
