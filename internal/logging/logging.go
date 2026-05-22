@@ -31,12 +31,6 @@ func (l *Logger) Info(msg string, args ...any)  { l.sl.Info(msg, args...) }
 func (l *Logger) Warn(msg string, args ...any)  { l.sl.Warn(msg, args...) }
 func (l *Logger) Error(msg string, args ...any) { l.sl.Error(msg, args...) }
 
-// With returns a child logger that adds the given key/value attributes to every
-// record. The returned logger stays within Rune's logging surface.
-func (l *Logger) With(args ...any) *Logger {
-	return &Logger{sl: l.sl.With(args...)}
-}
-
 func parseLevel(level string) slog.Level {
 	switch strings.ToLower(strings.TrimSpace(level)) {
 	case "debug":

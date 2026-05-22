@@ -246,7 +246,7 @@ results, err := client.MGet(ctx, "menu:1", "menu:2", "menu:3")
 ## Observability
 
 ### Structured Logging
-JSON logs with consistent fields: `timestamp`, `level`, `node_id`, `request_id`, `key`, `duration_ms`. Compatible with Loki, Datadog, CloudWatch, and any log aggregator without custom parsing. Log level configurable via `RUNE_LOG_LEVEL` (default `info`).
+JSON logs via `log/slog`: the standard `time`/`level`/`msg` plus structured attributes. Request access logs carry `method`, `duration_ms`, and `key`/`peer` where relevant (`code` only on failure). Membership and lifecycle events log at `info`; per-request access logs are at `debug`. Node identity is left to the collector's pod/node labels rather than embedded per line. Compatible with Loki, Datadog, CloudWatch, and any aggregator without custom parsing. Log level configurable via `RUNE_LOG_LEVEL` (default `info`).
 
 ### Health Checks
 Two gRPC health RPCs used by Kubernetes probes:
