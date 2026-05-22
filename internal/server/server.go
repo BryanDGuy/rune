@@ -46,8 +46,8 @@ func New(cfg *config.Config, store storage.Storage, logger *logging.Logger, clus
 	s.tracker = &connTracker{}
 	s.grpcServer = grpc.NewServer(
 		grpc.StatsHandler(s.tracker),
-		grpc.ChainUnaryInterceptor(s.logUnary),
-		grpc.ChainStreamInterceptor(s.logStream),
+		grpc.ChainUnaryInterceptor(s.logUnary, s.recoverUnary),
+		grpc.ChainStreamInterceptor(s.logStream, s.recoverStream),
 	)
 	runev1.RegisterRuneServiceServer(s.grpcServer, &handler{srv: s})
 	registerHealth(s)
