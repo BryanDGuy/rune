@@ -14,12 +14,6 @@ func TestLookupEmptyRing(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNoNodes)
 }
 
-func TestLookupNEmptyRing(t *testing.T) {
-	r := New()
-	_, err := r.LookupN("any-key", 1)
-	assert.ErrorIs(t, err, ErrNoNodes)
-}
-
 func TestLookupSingleNode(t *testing.T) {
 	r := New()
 	n := Node{ID: "node-1", Addr: "host1:7946"}
@@ -27,26 +21,6 @@ func TestLookupSingleNode(t *testing.T) {
 	got, err := r.Lookup("any-key")
 	require.NoError(t, err)
 	assert.Equal(t, n, got)
-}
-
-func TestLookupNDistinctNodes(t *testing.T) {
-	r := New()
-	r.Add(Node{ID: "node-1", Addr: "host1:7946"})
-	r.Add(Node{ID: "node-2", Addr: "host2:7946"})
-
-	nodes, err := r.LookupN("my-key", 2)
-	require.NoError(t, err)
-	require.Len(t, nodes, 2)
-	assert.NotEqual(t, nodes[0].ID, nodes[1].ID)
-}
-
-func TestLookupNPartialWhenFewer(t *testing.T) {
-	r := New()
-	r.Add(Node{ID: "node-1", Addr: "host1:7946"})
-
-	nodes, err := r.LookupN("my-key", 3)
-	require.NoError(t, err)
-	assert.Len(t, nodes, 1)
 }
 
 func TestLen(t *testing.T) {
