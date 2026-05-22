@@ -180,7 +180,6 @@ Configuration via environment variables. Key settings:
 | Env var                      | Default          |
 |------------------------------|------------------|
 | `RUNE_PORT`                  | `7946`           |
-| `RUNE_METRICS_PORT`          | `9090`           |
 | `RUNE_DATA_DIR`              | `/var/rune/data` |
 | `RUNE_LOG_LEVEL`             | `info`           |
 | `RUNE_MAX_STORAGE`           | `100GB`          |
@@ -246,19 +245,8 @@ results, err := client.MGet(ctx, "menu:1", "menu:2", "menu:3")
 
 ## Observability
 
-### Prometheus Metrics
-Rune exposes a `/metrics` HTTP endpoint on a separate port (default `9090`). Key metrics:
-
-- `rune_cache_hits_total` / `rune_cache_misses_total` — hit/miss counters
-- `rune_active_connections` — current in-flight gRPC connections
-- `rune_storage_used_bytes` / `rune_storage_max_bytes` — storage utilization
-- `rune_evictions_total` — weighted score evictions triggered
-- `rune_gc_duration_seconds` — BadgerDB GC duration histogram
-- `rune_rpc_duration_seconds` — per-RPC latency histograms (Get, Set, Delete, etc.)
-- `rune_replication_lag_seconds` — async replication lag to secondary replica
-
 ### Structured Logging
-JSON logs with consistent fields: `timestamp`, `level`, `node_id`, `request_id`, `key`, `duration_ms`. Compatible with Loki, Datadog, CloudWatch, and any log aggregator without custom parsing. Log level configurable via `log-level` (default `info`).
+JSON logs with consistent fields: `timestamp`, `level`, `node_id`, `request_id`, `key`, `duration_ms`. Compatible with Loki, Datadog, CloudWatch, and any log aggregator without custom parsing. Log level configurable via `RUNE_LOG_LEVEL` (default `info`).
 
 ### Health Checks
 Two gRPC health RPCs used by Kubernetes probes:
@@ -266,7 +254,6 @@ Two gRPC health RPCs used by Kubernetes probes:
 - `Readiness` — is this node ready to serve? (BadgerDB open, etcd connected, not mid-rebalance)
 
 ```
-RUNE_METRICS_PORT=9090
 RUNE_LOG_LEVEL=info
 ```
 

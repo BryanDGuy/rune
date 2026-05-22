@@ -117,7 +117,6 @@ All configuration is via environment variables. All settings have sensible defau
 | Env var                      | Default          | Description                          |
 |------------------------------|------------------|--------------------------------------|
 | `RUNE_PORT`                  | `7946`           | gRPC listen port                     |
-| `RUNE_METRICS_PORT`          | `9090`           | Prometheus metrics port              |
 | `RUNE_DATA_DIR`              | `/var/rune/data` | BadgerDB data directory              |
 | `RUNE_LOG_LEVEL`             | `info`           | Log level                            |
 | `RUNE_MAX_STORAGE`           | `100GB`          | Storage limit (KB/MB/GB/TB)          |
