@@ -69,6 +69,8 @@ func ParseLevel(s string) Level {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "debug":
 		return LevelDebug
+	case "info":
+		return LevelInfo
 	case "warn", "warning":
 		return LevelWarn
 	case "error":
