@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,7 +19,7 @@ import (
 func main() {
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		slog.Error("load config", "err", err)
+		logging.New("info", "").Error("load config", "err", err)
 		os.Exit(1)
 	}
 
@@ -53,7 +52,7 @@ func main() {
 	}
 }
 
-func buildServer(cfg *config.Config, store storage.Storage, logger *slog.Logger) (*server.Server, func()) {
+func buildServer(cfg *config.Config, store storage.Storage, logger *logging.Logger) (*server.Server, func()) {
 	if len(cfg.EtcdEndpoints) == 0 {
 		return server.New(cfg, store, logger, nil), func() {}
 	}

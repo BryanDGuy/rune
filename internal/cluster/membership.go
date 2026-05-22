@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/bryandguy/rune/internal/logging"
 	"github.com/bryandguy/rune/internal/router"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -51,7 +51,7 @@ type Membership struct {
 	store    memberStore
 	ring     *router.Router
 	cancel   context.CancelFunc
-	logger   *slog.Logger
+	logger   *logging.Logger
 	nodeID   string
 	nodeAddr string
 	leaseID  clientv3.LeaseID
@@ -59,9 +59,9 @@ type Membership struct {
 }
 
 // New builds a Membership. A nil logger discards all log output.
-func New(store memberStore, nodeID, nodeAddr string, logger *slog.Logger) *Membership {
+func New(store memberStore, nodeID, nodeAddr string, logger *logging.Logger) *Membership {
 	if logger == nil {
-		logger = slog.New(slog.DiscardHandler)
+		logger = logging.Discard()
 	}
 	return &Membership{
 		store:    store,

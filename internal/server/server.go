@@ -3,13 +3,13 @@ package server
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net"
 	"sync/atomic"
 
 	runev1 "github.com/bryandguy/rune/gen/rune/v1"
 	"github.com/bryandguy/rune/internal/cluster"
 	"github.com/bryandguy/rune/internal/config"
+	"github.com/bryandguy/rune/internal/logging"
 	"github.com/bryandguy/rune/internal/storage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/stats"
@@ -18,7 +18,7 @@ import (
 type Server struct {
 	cfg        *config.Config
 	store      storage.Storage
-	logger     *slog.Logger
+	logger     *logging.Logger
 	membership cluster.MembershipIface // nil in single-node mode
 	dialer     *cluster.PeerDialer     // nil in single-node mode
 	grpcServer *grpc.Server
@@ -34,9 +34,9 @@ type ClusterOptions struct {
 
 // New creates a Server. Pass a non-nil clusterOpts to run in cluster mode; nil is
 // single-node. A nil logger discards all log output.
-func New(cfg *config.Config, store storage.Storage, logger *slog.Logger, clusterOpts *ClusterOptions) *Server {
+func New(cfg *config.Config, store storage.Storage, logger *logging.Logger, clusterOpts *ClusterOptions) *Server {
 	if logger == nil {
-		logger = slog.New(slog.DiscardHandler)
+		logger = logging.Discard()
 	}
 	s := &Server{cfg: cfg, store: store, logger: logger}
 	if clusterOpts != nil {
