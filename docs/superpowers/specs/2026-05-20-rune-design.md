@@ -51,7 +51,7 @@ The **server** does hold each value fully in RAM during a Get or Set. This is an
 
 The client streams values in chunks of **1MB by default** (configurable via `RUNE_STREAM_CHUNK_SIZE`). The server accumulates chunks and writes to BadgerDB in one operation. Below 64KB, gRPC framing overhead dominates. Above 4MB, memory pressure increases without meaningful throughput gains on reads.
 
-**Proto surface (equivalents to Redis commands):**
+**Proto surface:**
 
 | RPC | Notes |
 |-----|-------|
@@ -60,12 +60,7 @@ The client streams values in chunks of **1MB by default** (configurable via `RUN
 | `Set` | Client-streaming: caller streams value chunks to server |
 | `Delete` | Delete one or more keys |
 | `Exists` | Check key existence |
-| `Keys` | Server-streaming: stream keys matching a pattern |
-| `Scan` | Cursor-based key iteration |
-| `MGet` | Bulk fetch (streaming per value) |
-| `MSet` | Bulk store (streaming per value) |
 | `Info` | Server stats (hit rate, storage, connections) |
-| `Flush` | Clear all keys on the node |
 
 ### 1a. Go SDK
 
@@ -114,8 +109,6 @@ This is safe for a cache because:
 
 BadgerDB embedded in each Rune process. BadgerDB's WiscKey-inspired design stores keys in an LSM tree and values in a separate append-only value log — this avoids write amplification for large values and scales to arbitrary value sizes bounded only by disk.
 
-**TTL updates re-read the full value.** `Expire` and `Persist` must read the blob out of BadgerDB and write it back with updated metadata — there is no API to update TTL in place. On large values this is an expensive operation; callers should treat TTL updates as a full read+write cycle in their cost model.
-
 **Eviction:** TTL (optional, caller-set) + weighted score eviction under storage pressure. See Eviction Details section.
 
 ### 4. Cluster Coordinator
@@ -130,7 +123,7 @@ Rune does not implement its own consensus. etcd is a required dependency for clu
 Rune uses two independent eviction mechanisms that coexist:
 
 ### TTL Expiry
-Handled natively by BadgerDB. Callers optionally set a TTL at write time. Expired keys are collected lazily on access and by a background sweep every 60s (configurable). TTL is optional — the expected usage pattern is long-lived entries that persist until explicitly deleted or evicted under storage pressure.
+Handled natively by BadgerDB. Callers optionally set a TTL at write time. Expired entries are skipped on read and their space is reclaimed during BadgerDB's value-log GC. TTL is optional — the expected usage pattern is long-lived entries that persist until explicitly deleted or evicted under storage pressure.
 
 ### Storage Pressure Eviction (Weighted Score)
 Triggered when storage exceeds a configurable threshold (default: 80% of `max-storage`). Rune evicts keys by weighted score:
@@ -224,20 +217,6 @@ RUNE_AUTH_TOKEN=your-secret-token
 ```
 
 TLS 1.2 minimum, TLS 1.3 preferred. `grpc.WithInsecure()` is never used in production builds.
-
-## Bulk Operations
-
-`MGet` and `MSet` operate across multiple keys that may live on different nodes.
-
-**Partial failure behavior:** if one or more keys live on an unavailable node, `MGet` returns partial results — available keys are returned normally, unavailable keys are returned as `nil` (cache miss). The caller treats `nil` as a cache miss and fetches from source. An error is only returned for actual transport failures, not cache misses.
-
-```go
-results, err := client.MGet(ctx, "menu:1", "menu:2", "menu:3")
-// err != nil only for transport failures
-// results["menu:2"] == nil means cache miss — fetch from source
-```
-
-`MSet` follows the same pattern — keys that cannot be written due to node unavailability are silently skipped. The cache will self-heal on the next write once the node recovers.
 
 ## Observability
 
