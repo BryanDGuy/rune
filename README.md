@@ -2,7 +2,7 @@
 
 > **Not production ready.** Rune is under active development. APIs may change without notice and there are no stability guarantees yet.
 
-A shared cache built for large files — stream blobs of any size across pods the way Redis streams strings.
+A shared cache built for large files — stream blobs across pods the way Redis streams strings, optimized for the large-value workloads where Redis falls apart.
 
 ## Why
 

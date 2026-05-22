@@ -7,7 +7,7 @@
 
 Rune is a gRPC-based cache server optimized for large values (1MB+). It is backed by BadgerDB and deployable as a shared cluster across Kubernetes pods. The core problem it solves: BadgerDB is file-local (can't be shared across pods), and Redis degrades severely with large values. Rune fills the gap — large-blob support with a centralized, shared architecture.
 
-Clients interact with Rune via an official Go SDK (with additional language SDKs to follow). The SDK exposes a streaming interface — callers receive a `Reader` rather than a `[]byte`, allowing processing to begin before a value is fully transferred. Value size is bounded only by available disk space and network bandwidth.
+Clients interact with Rune via an official Go SDK (with additional language SDKs to follow). The SDK exposes a streaming interface — callers receive a `Reader` rather than a `[]byte`, allowing processing to begin before a value is fully transferred. Value size is bounded by available disk space, network bandwidth, and server RAM (the server holds each value fully in memory during a Get or Set — see §3).
 
 Because BadgerDB is a pure Go embedded library, it is inaccessible to non-Go runtimes. Rune's gRPC layer changes this — the proto definition is language-agnostic, and SDKs for Python, Node, Rust, Java, and others can be generated from it. Rune effectively makes BadgerDB's large-value storage available to any language runtime, not just Go.
 
