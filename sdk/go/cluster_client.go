@@ -40,7 +40,7 @@ func defaultDial(addr string) (*Client, error) {
 // NewClusterClient creates a ClusterClient backed by a live etcd watch.
 // Pass nodeID="" for pure clients (no self-registration).
 func NewClusterClient(etcdClient *clientv3.Client, nodeID string) (*ClusterClient, error) {
-	m := cluster.New(etcdClient, nodeID, "")
+	m := cluster.New(etcdClient, nodeID, "", nil)
 	if err := m.Start(context.Background()); err != nil {
 		return nil, fmt.Errorf("start membership: %w", err)
 	}

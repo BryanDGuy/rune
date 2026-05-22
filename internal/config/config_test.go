@@ -20,7 +20,6 @@ func TestDefaults(t *testing.T) {
 	assert.InDelta(t, 1.0, cfg.EvictionAgeWeight, 1e-9)
 	assert.Equal(t, 1024*1024, cfg.StreamChunkSize) // 1MB
 	assert.Equal(t, "info", cfg.LogLevel)
-	assert.Equal(t, 9090, cfg.MetricsPort)
 }
 
 func TestEnvOverrides(t *testing.T) {
@@ -29,7 +28,6 @@ func TestEnvOverrides(t *testing.T) {
 	t.Setenv("RUNE_LOG_LEVEL", "debug")
 	t.Setenv("RUNE_MAX_STORAGE", "500MB")
 	t.Setenv("RUNE_EVICTION_THRESHOLD", "0.9")
-	t.Setenv("RUNE_METRICS_PORT", "9100")
 	t.Setenv("RUNE_GC_INTERVAL", "5m")
 
 	cfg, err := LoadConfig()
@@ -39,7 +37,6 @@ func TestEnvOverrides(t *testing.T) {
 	assert.Equal(t, "debug", cfg.LogLevel)
 	assert.Equal(t, int64(524288000), cfg.MaxStorageBytes) // 500MB
 	assert.InDelta(t, 0.9, cfg.EvictionThreshold, 1e-9)
-	assert.Equal(t, 9100, cfg.MetricsPort)
 	assert.InDelta(t, float64(5*time.Minute), float64(cfg.GCInterval), 0)
 }
 

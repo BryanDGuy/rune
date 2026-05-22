@@ -21,7 +21,6 @@ type Config struct {
 	GCInterval         time.Duration
 	GCDiscardRatio     float64
 	Port               int
-	MetricsPort        int
 	StreamChunkSize    int
 }
 
@@ -30,7 +29,6 @@ type Config struct {
 // Variables:
 //
 //	RUNE_PORT               (default: 7946)
-//	RUNE_METRICS_PORT       (default: 9090)
 //	RUNE_DATA_DIR           (default: /var/rune/data)
 //	RUNE_LOG_LEVEL          (default: info)
 //	RUNE_MAX_STORAGE        (default: 100GB)
@@ -46,7 +44,6 @@ type Config struct {
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		Port:               7946,
-		MetricsPort:        9090,
 		DataDir:            "/var/rune/data",
 		LogLevel:           "info",
 		MaxStorageBytes:    100 * 1024 * 1024 * 1024, // 100GB
@@ -63,11 +60,6 @@ func LoadConfig() (*Config, error) {
 	if v := os.Getenv("RUNE_PORT"); v != "" {
 		if cfg.Port, err = strconv.Atoi(v); err != nil {
 			return nil, fmt.Errorf("RUNE_PORT: %w", err)
-		}
-	}
-	if v := os.Getenv("RUNE_METRICS_PORT"); v != "" {
-		if cfg.MetricsPort, err = strconv.Atoi(v); err != nil {
-			return nil, fmt.Errorf("RUNE_METRICS_PORT: %w", err)
 		}
 	}
 	if v := os.Getenv("RUNE_DATA_DIR"); v != "" {

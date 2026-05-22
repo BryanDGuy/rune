@@ -37,6 +37,7 @@ services:
       RUNE_ETCD_ENDPOINTS: etcd:2379
       RUNE_NODE_ID: a
       RUNE_NODE_ADDR: rune-a:7946
+      RUNE_LOG_LEVEL: debug
     ports:
       - "7946:7946"
 
@@ -46,6 +47,7 @@ services:
       RUNE_ETCD_ENDPOINTS: etcd:2379
       RUNE_NODE_ID: b
       RUNE_NODE_ADDR: rune-b:7946
+      RUNE_LOG_LEVEL: debug
     ports:
       - "7947:7946"
 
@@ -55,5 +57,6 @@ services:
       RUNE_ETCD_ENDPOINTS: etcd:2379
       RUNE_NODE_ID: c
       RUNE_NODE_ADDR: rune-c:7946
+      RUNE_LOG_LEVEL: debug
     ports:
       - "7948:7946"

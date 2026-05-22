@@ -62,6 +62,7 @@ func (h *handler) Get(req *runev1.GetRequest, stream grpc.ServerStreamingServer[
 	addr, remote := h.owner(stream.Context(), req.Key)
 	setOwnerHint(stream, addr)
 	if remote {
+		h.srv.logger.Debug("forwarding get", "key", req.Key, "owner", addr)
 		return h.forwardGet(stream.Context(), addr, req, stream)
 	}
 	value, err := h.srv.store.Get(req.Key)
@@ -127,6 +128,7 @@ func (h *handler) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, runev
 	addr, remote := h.owner(stream.Context(), hdr.Key)
 	setOwnerHint(stream, addr)
 	if remote {
+		h.srv.logger.Debug("forwarding set", "key", hdr.Key, "owner", addr)
 		return h.forwardSet(stream.Context(), addr, hdr, stream)
 	}
 

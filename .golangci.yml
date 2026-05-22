@@ -28,6 +28,7 @@ linters:
     - perfsprint
     - prealloc
     # Idiomatic
+    - depguard
     - gocritic
     - intrange
     - mirror
@@ -44,6 +45,15 @@ linters:
     - thelper
     - usetesting
   settings:
+    depguard:
+      rules:
+        no-direct-logging:
+          files:
+            - "**/*.go"
+            - "!**/internal/logging/*.go"
+          deny:
+            - pkg: log
+              desc: log through internal/logging.Logger, not log or slog directly
     govet:
       enable-all: true
     misspell:
