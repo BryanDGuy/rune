@@ -14,11 +14,11 @@ type Logger struct {
 	sl *slog.Logger
 }
 
-// New returns a JSON logger writing to stderr at the given level, tagged with
-// the node's id. Recognized levels: debug, info, warn, error (else info).
-func New(level, nodeID string) *Logger {
+// New returns a JSON logger writing to stderr at the given level. Recognized
+// levels: debug, info, warn, error (anything else falls back to info).
+func New(level string) *Logger {
 	handler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: parseLevel(level)})
-	return &Logger{sl: slog.New(handler).With("node_id", nodeID)}
+	return &Logger{sl: slog.New(handler)}
 }
 
 // Discard returns a Logger that drops all output. Useful as a default and in tests.
