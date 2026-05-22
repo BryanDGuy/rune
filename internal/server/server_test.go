@@ -6,8 +6,11 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	runev1 "github.com/bryandguy/rune/gen/rune/v1"
+	"github.com/bryandguy/rune/internal/server"
+	"github.com/bryandguy/rune/internal/storage"
 	"github.com/bryandguy/rune/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,6 +19,7 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/test/bufconn"
 )
 
 const bufSize = 1 << 20 // 1MB bufconn buffer
@@ -336,6 +340,29 @@ func TestLargePayload(t *testing.T) {
 	}
 	require.Len(t, got, size)
 	assert.Equal(t, payload, got)
+}
+
+func TestGracefulShutdown(t *testing.T) {
+	cfg := testutil.BaseConfig(t)
+	store, err := storage.NewBadgerStore(cfg)
+	require.NoError(t, err)
+
+	lis := bufconn.Listen(1 << 20)
+	srv := server.New(cfg, store, nil)
+	srv.StartOnListener(lis)
+
+	done := make(chan struct{})
+	go func() {
+		srv.Stop()
+		_ = store.Close()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("graceful shutdown timed out")
+	}
 }
 
 func TestForwardingLoopPrevention(t *testing.T) {
