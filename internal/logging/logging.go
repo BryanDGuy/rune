@@ -15,10 +15,9 @@ type Logger struct {
 	sl *slog.Logger
 }
 
-// New returns a JSON logger writing to stderr at the given level. Recognized
-// levels: debug, info, warn, error (anything else falls back to info).
-func New(level string) *Logger {
-	handler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: parseLevel(level)})
+// New returns a JSON logger writing to stderr at the given level.
+func New(level Level) *Logger {
+	handler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level.toSlog()})
 	return &Logger{sl: slog.New(handler)}
 }
 
@@ -38,15 +37,43 @@ func (l *Logger) DebugEnabled(ctx context.Context) bool {
 	return l.sl.Enabled(ctx, slog.LevelDebug)
 }
 
-func parseLevel(level string) slog.Level {
-	switch strings.ToLower(strings.TrimSpace(level)) {
-	case "debug":
+// Level is Rune's log level. It maps to slog internally so callers never need
+// to import log/slog.
+type Level int
+
+const (
+	LevelDebug Level = iota
+	LevelInfo
+	LevelWarn
+	LevelError
+)
+
+func (l Level) toSlog() slog.Level {
+	switch l {
+	case LevelDebug:
 		return slog.LevelDebug
-	case "warn", "warning":
+	case LevelInfo:
+		return slog.LevelInfo
+	case LevelWarn:
 		return slog.LevelWarn
-	case "error":
+	case LevelError:
 		return slog.LevelError
 	default:
 		return slog.LevelInfo
+	}
+}
+
+// ParseLevel converts a level string (debug, info, warn/warning, error) to a
+// Level, falling back to LevelInfo for anything unrecognized.
+func ParseLevel(s string) Level {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "debug":
+		return LevelDebug
+	case "warn", "warning":
+		return LevelWarn
+	case "error":
+		return LevelError
+	default:
+		return LevelInfo
 	}
 }

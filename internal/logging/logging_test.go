@@ -10,18 +10,25 @@ import (
 func TestParseLevel(t *testing.T) {
 	cases := []struct {
 		in   string
-		want slog.Level
+		want Level
 	}{
-		{"debug", slog.LevelDebug},
-		{"info", slog.LevelInfo},
-		{"WARN", slog.LevelWarn},
-		{"warning", slog.LevelWarn},
-		{"error", slog.LevelError},
-		{"", slog.LevelInfo},
-		{"nonsense", slog.LevelInfo},
-		{" Debug   ", slog.LevelDebug},
+		{"debug", LevelDebug},
+		{"info", LevelInfo},
+		{"WARN", LevelWarn},
+		{"warning", LevelWarn},
+		{"error", LevelError},
+		{"", LevelInfo},
+		{"nonsense", LevelInfo},
+		{" Debug   ", LevelDebug},
 	}
 	for _, c := range cases {
-		assert.Equal(t, c.want, parseLevel(c.in), "parseLevel(%q)", c.in)
+		assert.Equal(t, c.want, ParseLevel(c.in), "ParseLevel(%q)", c.in)
 	}
+}
+
+func TestLevelToSlog(t *testing.T) {
+	assert.Equal(t, slog.LevelDebug, LevelDebug.toSlog())
+	assert.Equal(t, slog.LevelInfo, LevelInfo.toSlog())
+	assert.Equal(t, slog.LevelWarn, LevelWarn.toSlog())
+	assert.Equal(t, slog.LevelError, LevelError.toSlog())
 }

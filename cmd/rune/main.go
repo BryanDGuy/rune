@@ -19,11 +19,11 @@ import (
 func main() {
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		logging.New("info").Error("load config", "err", err)
+		logging.New(logging.LevelInfo).Error("load config", "err", err)
 		os.Exit(1)
 	}
 
-	logger := logging.New(cfg.LogLevel)
+	logger := logging.New(logging.ParseLevel(cfg.LogLevel))
 
 	store, err := storage.NewBadgerStore(cfg)
 	if err != nil {
