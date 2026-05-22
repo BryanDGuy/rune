@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	runev1 "github.com/bryandguy/rune/gen/rune/v1"
+	"github.com/bryandguy/rune/internal/cluster"
 	"github.com/bryandguy/rune/internal/config"
 	"github.com/bryandguy/rune/internal/storage"
 	"google.golang.org/grpc"
@@ -16,18 +17,35 @@ import (
 type Server struct {
 	cfg        *config.Config
 	store      storage.Storage
+	membership cluster.MembershipIface // nil in single-node mode
+	dialer     *cluster.PeerDialer     // nil in single-node mode
 	grpcServer *grpc.Server
 	tracker    *connTracker
 }
 
-// New creates a Server. Call Start or StartOnListener to begin accepting connections.
-func New(cfg *config.Config, store storage.Storage) *Server {
+// ClusterOptions wires a Server into a cluster. Membership and Dialer must both
+// be set together. A nil *ClusterOptions means single-node mode.
+type ClusterOptions struct {
+	Membership cluster.MembershipIface
+	Dialer     *cluster.PeerDialer
+}
+
+// New creates a Server. Pass a non-nil clusterOpts to run in cluster mode; nil is single-node.
+func New(cfg *config.Config, store storage.Storage, clusterOpts *ClusterOptions) *Server {
 	s := &Server{cfg: cfg, store: store}
+	if clusterOpts != nil {
+		s.membership = clusterOpts.Membership
+		s.dialer = clusterOpts.Dialer
+	}
 	s.tracker = &connTracker{}
 	s.grpcServer = grpc.NewServer(grpc.StatsHandler(s.tracker))
 	runev1.RegisterRuneServiceServer(s.grpcServer, &handler{srv: s})
 	registerHealth(s)
 	return s
+}
+
+func (s *Server) clusterMode() bool {
+	return s.membership != nil
 }
 
 func (s *Server) Start(ctx context.Context) error {

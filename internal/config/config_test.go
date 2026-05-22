@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -57,4 +58,44 @@ func TestParseBytes(t *testing.T) {
 		require.NoError(t, err, "input: %s", c.input)
 		assert.Equal(t, c.want, got, "input: %s", c.input)
 	}
+}
+
+func TestConfigEtcdEndpoints(t *testing.T) {
+	t.Setenv("RUNE_ETCD_ENDPOINTS", "etcd1:2379,etcd2:2379")
+	cfg, err := LoadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"etcd1:2379", "etcd2:2379"}, cfg.EtcdEndpoints)
+}
+
+func TestConfigEtcdEndpointsEmpty(t *testing.T) {
+	cfg, err := LoadConfig()
+	require.NoError(t, err)
+	assert.Empty(t, cfg.EtcdEndpoints, "no env var = single-node mode")
+}
+
+func TestConfigNodeID(t *testing.T) {
+	t.Setenv("RUNE_NODE_ID", "node-abc")
+	cfg, err := LoadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, "node-abc", cfg.NodeID)
+}
+
+func TestConfigNodeIDDefaultsToHostname(t *testing.T) {
+	cfg, err := LoadConfig()
+	require.NoError(t, err)
+	hostname, _ := os.Hostname()
+	assert.Equal(t, hostname, cfg.NodeID)
+}
+
+func TestConfigNodeAddr(t *testing.T) {
+	t.Setenv("RUNE_NODE_ADDR", "rune-0.rune.svc.cluster.local:7946")
+	cfg, err := LoadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, "rune-0.rune.svc.cluster.local:7946", cfg.NodeAddr)
+}
+
+func TestConfigNodeAddrDefaultsToLocalhostPort(t *testing.T) {
+	cfg, err := LoadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, "localhost:7946", cfg.NodeAddr)
 }

@@ -23,10 +23,7 @@ Pods (Go SDK / future SDKs)
 │   Rune Node A   │     │   Rune Node B   │     │   Rune Node C   │
 │  ┌───────────┐  │     │  ┌───────────┐  │     │  ┌───────────┐  │
 │  │   gRPC    │  │     │  │   gRPC    │  │     │  │   gRPC    │  │
-│  │  Server   │  │     │  │  Server   │  │     │  │  Server   │  │
-│  └─────┬─────┘  │     │  └─────┬─────┘  │     │  └─────┬─────┘  │
-│  ┌─────▼─────┐  │     │  ┌─────▼─────┐  │     │  ┌─────▼─────┐  │
-│  │  Router   │  │     │  │  Router   │  │     │  │  Router   │  │
+│  │  Server   ├──┼─────┼──┤  Server   ├──┼─────┼──┤  Server   │  │
 │  └─────┬─────┘  │     │  └─────┬─────┘  │     │  └─────┬─────┘  │
 │  ┌─────▼─────┐  │     │  ┌─────▼─────┐  │     │  ┌─────▼─────┐  │
 │  │  BadgerDB │  │     │  │  BadgerDB │  │     │  │  BadgerDB │  │
@@ -84,11 +81,11 @@ Additional language SDKs (Python, Node, Rust) follow the same pattern via genera
 
 ### 2. Router
 
-Determines key ownership using consistent hashing. Default replication factor: 2 (configurable).
+Determines key ownership using consistent hashing. Default replication factor: 2.
 
 **Node identity:** Each node carries a stable `ID` (used for ring placement) and an `Addr` (host:port used for dialing). These are kept separate so a node can change its network address (e.g., pod restart with a new IP) without shifting its position on the hash ring and triggering unnecessary key remapping.
 
-**Virtual nodes:** The ring uses 20 virtual nodes (vnodes) per physical node (`ReplicationFactor: 20` in `buraksezer/consistent`) across 271 partitions (`PartitionCount: 271`, a prime). Without vnodes, a small cluster (3–5 nodes) produces uneven ring slices and skewed load. 20 vnodes per node provides uniform distribution without meaningful memory overhead.
+**Virtual nodes:** The ring uses 20 virtual nodes (vnodes) per physical node across 271 partitions (`PartitionCount: 271`, a prime). Note: `ReplicationFactor: 20` in `buraksezer/consistent` controls the vnode count, not the data replication factor. Without vnodes, a small cluster (3–5 nodes) produces uneven ring slices and skewed load. 20 vnodes per node provides uniform distribution without meaningful memory overhead.
 
 Replication exists purely for **availability** — if one node goes down, the key is still readable from the second replica without a cache miss. Rune makes no durability guarantees; the source of truth always lives outside Rune (S3, database, etc.). A cache miss is an expected and acceptable failure mode.
 
@@ -104,7 +101,9 @@ Replication exists purely for **availability** — if one node goes down, the ke
 
 **Replica placement** is computed, not stored. Given a key and the current hash ring, the primary is the first node clockwise from the key's hash position. The secondary replica is the next node clockwise. Any node — and the SDK itself — can independently compute both locations from just the key and the ring. No per-key tracking in etcd is needed.
 
-etcd stores only the **ring membership** (the ordered list of nodes and their positions on the hash ring). The SDK watches etcd for ring changes and updates its local copy. All routing decisions are made locally from that cached ring — no etcd round-trip per request.
+**Direct (non-SDK) clients:** Because the proto is language-agnostic, clients can be generated in any language and call Rune without the cluster-aware SDK. Such a client may connect to any node; if that node does not own the requested key, it forwards the request to the owner and relays the response back, so results are correct regardless of entry point — at the cost of one extra hop. To let thin clients route directly and skip that hop, every Get/Set response carries an `x-rune-owner` header set to the owning node's advertised address. A client caches `key → address` and connects to the owner itself next time, gaining owner-aware routing without watching etcd or reimplementing the ring. Stale hints self-correct: the entry node forwards again and returns an updated `x-rune-owner`. A loop marker (`x-rune-forwarded`) ensures a forwarded request is served locally and never re-forwarded.
+
+etcd stores **node registrations** (ID + address) under `/rune/nodes/{nodeID}`. Each node builds and maintains its local ring from those registrations via an etcd watch — the ring itself is never stored in etcd. All routing decisions are made locally from that cached ring — no etcd round-trip per request.
 
 **Rebalance on node join/leave** uses lazy migration — data is not eagerly moved when the ring changes. When a key's hash position maps to a new owner but the data hasn't migrated yet, the new owner asks the previous owner for the value, serves it to the caller, and stores a local copy. The previous owner's copy expires naturally via TTL or eviction pressure. Data drifts to the correct node over time without any bulk transfer.
 
@@ -124,9 +123,8 @@ BadgerDB embedded in each Rune process. BadgerDB's WiscKey-inspired design store
 ### 4. Cluster Coordinator
 
 etcd handles:
-- **Leader election** — one node is elected coordinator for rebalance operations
-- **Membership** — nodes register on startup, deregister on shutdown, are tombstoned on crash
-- **Shard map** — consistent hash ring stored in etcd, watched by all nodes
+- **Membership** — nodes register on startup with a lease + keepalive; lease expiry removes crashed nodes automatically; clean shutdown revokes the lease immediately. All nodes watch the membership prefix and update their local ring on any change.
+- **Leader election** — one node elected coordinator for rebalance operations
 - **Rebalance** — triggered by membership changes, coordinated by the elected leader
 
 Rune does not implement its own consensus. etcd is a required dependency for cluster mode. Single-node mode (no etcd) is supported for local dev.
@@ -193,7 +191,9 @@ Configuration via environment variables. Key settings:
 | `RUNE_GC_INTERVAL`           | `10m`            |
 | `RUNE_GC_DISCARD_RATIO`      | `0.5`            |
 
-Cluster-mode settings (etcd endpoints, replication factor) are roadmap items — not yet implemented.
+| `RUNE_ETCD_ENDPOINTS`        | _(empty)_        |
+| `RUNE_NODE_ID`               | hostname         |
+| `RUNE_NODE_ADDR`             | `localhost:{RUNE_PORT}` |
 
 ## Deployment
 

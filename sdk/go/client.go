@@ -15,12 +15,6 @@ import (
 
 const chunkSize = 1 << 20 // 1MB
 
-var ErrNotFound = errors.New("key not found")
-
-type SetOptions struct {
-	TTL time.Duration
-}
-
 type Client struct {
 	conn *grpc.ClientConn
 	grpc runev1.RuneServiceClient

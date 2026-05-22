@@ -11,15 +11,18 @@ import (
 type Config struct {
 	LogLevel           string
 	DataDir            string
-	MaxStorageBytes    int64
+	NodeID             string
+	NodeAddr           string
+	EtcdEndpoints      []string
 	EvictionThreshold  float64
+	MaxStorageBytes    int64
 	EvictionSizeWeight float64
 	EvictionAgeWeight  float64
+	GCInterval         time.Duration
+	GCDiscardRatio     float64
 	Port               int
 	MetricsPort        int
 	StreamChunkSize    int
-	GCInterval         time.Duration
-	GCDiscardRatio     float64
 }
 
 // LoadConfig builds a Config from environment variables, falling back to defaults.
@@ -37,6 +40,9 @@ type Config struct {
 //	RUNE_STREAM_CHUNK_SIZE  (default: 1048576)
 //	RUNE_GC_INTERVAL        (default: 10m)
 //	RUNE_GC_DISCARD_RATIO   (default: 0.5)
+//	RUNE_ETCD_ENDPOINTS     (default: "" — single-node mode; comma-separated in cluster mode)
+//	RUNE_NODE_ID            (default: hostname)
+//	RUNE_NODE_ADDR          (default: localhost:{RUNE_PORT})
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		Port:               7946,
@@ -104,6 +110,18 @@ func LoadConfig() (*Config, error) {
 		if cfg.GCDiscardRatio, err = strconv.ParseFloat(v, 64); err != nil {
 			return nil, fmt.Errorf("RUNE_GC_DISCARD_RATIO: %w", err)
 		}
+	}
+	if v := os.Getenv("RUNE_ETCD_ENDPOINTS"); v != "" {
+		cfg.EtcdEndpoints = strings.Split(v, ",")
+	}
+	hostname, _ := os.Hostname()
+	cfg.NodeID = hostname
+	if v := os.Getenv("RUNE_NODE_ID"); v != "" {
+		cfg.NodeID = v
+	}
+	cfg.NodeAddr = fmt.Sprintf("localhost:%d", cfg.Port)
+	if v := os.Getenv("RUNE_NODE_ADDR"); v != "" {
+		cfg.NodeAddr = v
 	}
 	return cfg, nil
 }
