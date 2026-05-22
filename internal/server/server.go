@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"sync/atomic"
 
@@ -17,6 +18,7 @@ import (
 type Server struct {
 	cfg        *config.Config
 	store      storage.Storage
+	logger     *slog.Logger
 	membership cluster.MembershipIface // nil in single-node mode
 	dialer     *cluster.PeerDialer     // nil in single-node mode
 	grpcServer *grpc.Server
@@ -30,15 +32,23 @@ type ClusterOptions struct {
 	Dialer     *cluster.PeerDialer
 }
 
-// New creates a Server. Pass a non-nil clusterOpts to run in cluster mode; nil is single-node.
-func New(cfg *config.Config, store storage.Storage, clusterOpts *ClusterOptions) *Server {
-	s := &Server{cfg: cfg, store: store}
+// New creates a Server. Pass a non-nil clusterOpts to run in cluster mode; nil is
+// single-node. A nil logger discards all log output.
+func New(cfg *config.Config, store storage.Storage, logger *slog.Logger, clusterOpts *ClusterOptions) *Server {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	s := &Server{cfg: cfg, store: store, logger: logger}
 	if clusterOpts != nil {
 		s.membership = clusterOpts.Membership
 		s.dialer = clusterOpts.Dialer
 	}
 	s.tracker = &connTracker{}
-	s.grpcServer = grpc.NewServer(grpc.StatsHandler(s.tracker))
+	s.grpcServer = grpc.NewServer(
+		grpc.StatsHandler(s.tracker),
+		grpc.ChainUnaryInterceptor(s.logUnary),
+		grpc.ChainStreamInterceptor(s.logStream),
+	)
 	runev1.RegisterRuneServiceServer(s.grpcServer, &handler{srv: s})
 	registerHealth(s)
 	return s

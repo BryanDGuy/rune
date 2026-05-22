@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -51,16 +51,22 @@ type Membership struct {
 	store    memberStore
 	ring     *router.Router
 	cancel   context.CancelFunc
+	logger   *slog.Logger
 	nodeID   string
 	nodeAddr string
 	leaseID  clientv3.LeaseID
 	wg       sync.WaitGroup
 }
 
-func New(store memberStore, nodeID, nodeAddr string) *Membership {
+// New builds a Membership. A nil logger discards all log output.
+func New(store memberStore, nodeID, nodeAddr string, logger *slog.Logger) *Membership {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	return &Membership{
 		store:    store,
 		ring:     router.New(),
+		logger:   logger,
 		nodeID:   nodeID,
 		nodeAddr: nodeAddr,
 	}
@@ -92,6 +98,7 @@ func (m *Membership) register(ctx context.Context) error {
 	if err := m.grantAndPut(ctx); err != nil {
 		return err
 	}
+	m.logger.Info("registered in cluster", "addr", m.nodeAddr, "lease", int64(m.leaseID))
 	m.wg.Go(func() { m.keepAliveLoop(ctx) })
 	return nil
 }
@@ -127,7 +134,7 @@ func (m *Membership) keepAliveLoop(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		log.Printf("cluster: lease %x lost for node %q, re-registering", m.leaseID, m.nodeID)
+		m.logger.Warn("lease lost, re-registering", "lease", int64(m.leaseID))
 		m.reregister(ctx)
 	}
 }
@@ -135,6 +142,7 @@ func (m *Membership) keepAliveLoop(ctx context.Context) {
 func (m *Membership) reregister(ctx context.Context) {
 	for ctx.Err() == nil {
 		if err := m.grantAndPut(ctx); err == nil {
+			m.logger.Info("re-registered in cluster", "lease", int64(m.leaseID))
 			return
 		}
 		select {
@@ -163,10 +171,15 @@ func (m *Membership) watchLoop(ctx context.Context) {
 			for _, ev := range wresp.Events {
 				switch ev.Type {
 				case mvccpb.PUT:
-					m.applyPut(ev.Kv.Value)
+					if id, ok := m.applyPut(ev.Kv.Value); ok && id != m.nodeID {
+						m.logger.Info("peer joined", "peer_id", id)
+					}
 				case mvccpb.DELETE:
 					nodeID := strings.TrimPrefix(string(ev.Kv.Key), nodePrefix)
 					m.ring.Remove(nodeID)
+					if nodeID != m.nodeID {
+						m.logger.Info("peer left", "peer_id", nodeID)
+					}
 				}
 			}
 		}
@@ -174,6 +187,7 @@ func (m *Membership) watchLoop(ctx context.Context) {
 			return
 		}
 		// An unexpected watch drop (ctx still live) may have skipped events, leaving the ring stale.
+		m.logger.Warn("watch dropped, resyncing ring")
 		_ = m.populate(ctx)
 		select {
 		case <-ctx.Done():
@@ -183,11 +197,13 @@ func (m *Membership) watchLoop(ctx context.Context) {
 	}
 }
 
-func (m *Membership) applyPut(val []byte) {
+func (m *Membership) applyPut(val []byte) (nodeID string, ok bool) {
 	var info NodeInfo
-	if err := json.Unmarshal(val, &info); err == nil {
-		m.ring.Add(router.Node{ID: info.ID, Addr: info.Addr})
+	if err := json.Unmarshal(val, &info); err != nil {
+		return "", false
 	}
+	m.ring.Add(router.Node{ID: info.ID, Addr: info.Addr})
+	return info.ID, true
 }
 
 // Ring returns the current consistent hash ring. Safe for concurrent use.
