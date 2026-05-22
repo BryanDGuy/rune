@@ -1,0 +1,65 @@
+# Local 3-node Rune cluster backed by a single etcd, for smoke-testing cluster
+# mode (membership, ring routing, server-side forwarding).
+#
+#   docker compose up --build
+#
+# Each node advertises its compose-network address (rune-a:7946, ...) so peers
+# can forward to each other. Host ports 7946/7947/7948 reach a/b/c respectively.
+#
+# A single-node SDK Client pointed at any one host port exercises forwarding,
+# since that node forwards to the owner over the internal network. An SDK
+# ClusterClient must run inside this network (the advertised rune-* addresses
+# are not resolvable from the host).
+
+x-rune: &rune
+  build: .
+  restart: unless-stopped
+  depends_on:
+    etcd:
+      condition: service_healthy
+
+services:
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.21
+    command:
+      - etcd
+      - --name=etcd0
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd:2380
+      - --initial-cluster=etcd0=http://etcd:2380
+    ports:
+      - "2379:2379"
+    healthcheck:
+      test: ["CMD", "etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  rune-a:
+    <<: *rune
+    environment:
+      RUNE_ETCD_ENDPOINTS: etcd:2379
+      RUNE_NODE_ID: a
+      RUNE_NODE_ADDR: rune-a:7946
+    ports:
+      - "7946:7946"
+
+  rune-b:
+    <<: *rune
+    environment:
+      RUNE_ETCD_ENDPOINTS: etcd:2379
+      RUNE_NODE_ID: b
+      RUNE_NODE_ADDR: rune-b:7946
+    ports:
+      - "7947:7946"
+
+  rune-c:
+    <<: *rune
+    environment:
+      RUNE_ETCD_ENDPOINTS: etcd:2379
+      RUNE_NODE_ID: c
+      RUNE_NODE_ADDR: rune-c:7946
+    ports:
+      - "7948:7946"
