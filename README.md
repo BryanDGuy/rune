@@ -51,7 +51,7 @@ Measured on a 3-node cluster over a Docker bridge network (loopback). Production
 | 100 MB    | 183ms   | 221ms   | 63.0ms  | 72.0ms  | 544      | 1573     |
 | 500 MB    | 1.23s   | 1.39s   | 342ms   | 939ms   | 406      | 1461     |
 
-For comparison, a GET from S3 in the same region typically runs 200ms–2s for 100MB depending on pod location and S3 load. Rune's 62ms p50 at 100MB is a 3–30× improvement — and unlike S3, it doesn't add per-request cost or egress charges.
+For comparison, a GET from S3 in the same region typically runs 200ms–2s for 100MB depending on pod location and S3 load. Rune's 63ms p50 at 100MB is a 3–30× improvement — and unlike S3, it doesn't add per-request cost or egress charges.
 
 To reproduce: `make cluster-up && make bench`
 
