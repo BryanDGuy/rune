@@ -4,7 +4,7 @@ BINARY       := bin/rune
 BENCH_BINARY := bin/bench
 
 build:
-	go build -o $(BINARY) ./cmd/rune
+	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BINARY) ./cmd/rune
 
 test:
 	go test -race ./...
