@@ -6,6 +6,15 @@ BENCH_BINARY := bin/bench
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BINARY) ./cmd/rune
 
+proto:
+	protoc \
+		--go_out=gen \
+		--go_opt=paths=source_relative \
+		--go-grpc_out=gen \
+		--go-grpc_opt=paths=source_relative \
+		--proto_path=proto \
+		rune/v1/rune.proto
+
 tidy:
 	go mod tidy
 
@@ -38,15 +47,6 @@ modernize:
 
 modernize-fix:
 	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix $(shell go list ./... | grep -v /gen/)
-
-proto:
-	protoc \
-		--go_out=gen \
-		--go_opt=paths=source_relative \
-		--go-grpc_out=gen \
-		--go-grpc_opt=paths=source_relative \
-		--proto_path=proto \
-		rune/v1/rune.proto
 
 # Local 3-node cluster + etcd via docker-compose (nodes on host ports 7946/7947/7948).
 cluster-up:
