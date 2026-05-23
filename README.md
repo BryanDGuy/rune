@@ -46,10 +46,10 @@ Measured on a 3-node cluster over a Docker bridge network (loopback). Production
 
 | Blob Size | Set p50 | Set p99 | Get p50 | Get p99 | Set MB/s | Get MB/s |
 |-----------|---------|---------|---------|---------|----------|----------|
-| 1 MB      | 5.0ms   | 8.0ms   | 2.0ms   | 4.0ms   | 195      | 461      |
-| 10 MB     | 23.0ms  | 36.0ms  | 9.0ms   | 14.0ms  | 420      | 1068     |
-| 100 MB    | 230ms   | 280ms   | 62.0ms  | 71.0ms  | 433      | 1607     |
-| 500 MB    | 1.13s   | 1.13s   | 682ms   | 682ms   | 442      | 733      |
+| 1 MB      | 3.0ms   | 6.0ms   | 1.0ms   | 1.0ms   | 297      | 774      |
+| 10 MB     | 18.0ms  | 24.0ms  | 7.0ms   | 12.0ms  | 541      | 1267     |
+| 100 MB    | 183ms   | 221ms   | 63.0ms  | 72.0ms  | 544      | 1573     |
+| 500 MB    | 1.23s   | 1.39s   | 342ms   | 939ms   | 406      | 1461     |
 
 For comparison, a GET from S3 in the same region typically runs 200ms–2s for 100MB depending on pod location and S3 load. Rune's 62ms p50 at 100MB is a 3–30× improvement — and unlike S3, it doesn't add per-request cost or egress charges.
 
