@@ -1,41 +1,10 @@
-.PHONY: build test test-integration lint fmt fmt-check vet tidy update-deps modernize modernize-fix proto cluster-up cluster-down bench
+.PHONY: build proto tidy update-deps test test-integration verify lint fmt fmt-check vet modernize modernize-fix cluster-up cluster-down bench
 
 BINARY       := bin/rune
 BENCH_BINARY := bin/bench
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BINARY) ./cmd/rune
-
-test:
-	go test -race ./...
-
-test-integration:
-	go test -race -tags integration ./...
-
-lint:
-	golangci-lint run ./...
-
-fmt:
-	gofmt -l -w .
-
-fmt-check:
-	test -z "$$(gofmt -l .)"
-
-vet:
-	go vet ./...
-
-tidy:
-	go mod tidy
-
-update-deps:
-	go get -u ./...
-	go mod tidy
-
-modernize:
-	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest $(shell go list ./... | grep -v /gen/)
-
-modernize-fix:
-	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix $(shell go list ./... | grep -v /gen/)
 
 proto:
 	protoc \
@@ -45,6 +14,39 @@ proto:
 		--go-grpc_opt=paths=source_relative \
 		--proto_path=proto \
 		rune/v1/rune.proto
+
+tidy:
+	go mod tidy
+
+update-deps:
+	go get -u ./...
+	go mod tidy
+
+test:
+	go test -race $(shell go list ./... | grep -v /test/integration)
+
+test-integration:
+	go test -race ./test/integration/...
+
+verify: lint fmt-check vet modernize
+
+lint:
+	@golangci-lint run ./...
+
+fmt:
+	@gofmt -l -w .
+
+fmt-check:
+	@test -z "$$(gofmt -l .)"
+
+vet:
+	@go vet ./...
+
+modernize:
+	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest $(shell go list ./... | grep -v /gen/)
+
+modernize-fix:
+	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix $(shell go list ./... | grep -v /gen/)
 
 # Local 3-node cluster + etcd via docker-compose (nodes on host ports 7946/7947/7948).
 cluster-up:
