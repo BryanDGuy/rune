@@ -405,7 +405,6 @@ func (x *DeleteRequest) GetKeys() []string {
 
 type DeleteResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Deleted       int64                  `protobuf:"varint,1,opt,name=deleted,proto3" json:"deleted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -438,13 +437,6 @@ func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use DeleteResponse.ProtoReflect.Descriptor instead.
 func (*DeleteResponse) Descriptor() ([]byte, []int) {
 	return file_rune_v1_rune_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *DeleteResponse) GetDeleted() int64 {
-	if x != nil {
-		return x.Deleted
-	}
-	return 0
 }
 
 type ExistsRequest struct {
@@ -679,9 +671,8 @@ const file_rune_v1_rune_proto_rawDesc = "" +
 	"ttlSeconds\"\r\n" +
 	"\vSetResponse\"#\n" +
 	"\rDeleteRequest\x12\x12\n" +
-	"\x04keys\x18\x01 \x03(\tR\x04keys\"*\n" +
-	"\x0eDeleteResponse\x12\x18\n" +
-	"\adeleted\x18\x01 \x01(\x03R\adeleted\"#\n" +
+	"\x04keys\x18\x01 \x03(\tR\x04keys\"\x10\n" +
+	"\x0eDeleteResponse\"#\n" +
 	"\rExistsRequest\x12\x12\n" +
 	"\x04keys\x18\x01 \x03(\tR\x04keys\"&\n" +
 	"\x0eExistsResponse\x12\x14\n" +

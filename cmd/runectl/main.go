@@ -163,12 +163,8 @@ func cmdDelete(args []string) error {
 	}
 	defer conn.Close()
 
-	resp, err := runev1.NewRuneServiceClient(conn).Delete(context.Background(), &runev1.DeleteRequest{Keys: fs.Args()})
-	if err != nil {
-		return err
-	}
-	fmt.Printf("deleted %d key(s)\n", resp.Deleted)
-	return nil
+	_, err = runev1.NewRuneServiceClient(conn).Delete(context.Background(), &runev1.DeleteRequest{Keys: fs.Args()})
+	return err
 }
 
 func cmdExists(args []string) error {

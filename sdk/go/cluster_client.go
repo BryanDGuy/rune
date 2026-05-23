@@ -103,6 +103,23 @@ func (c *ClusterClient) clientFor(key string) (*Client, error) {
 	return client, nil
 }
 
+func (c *ClusterClient) Delete(ctx context.Context, keys ...string) error {
+	byNode := make(map[*Client][]string)
+	for _, key := range keys {
+		client, err := c.clientFor(key)
+		if err != nil {
+			return err
+		}
+		byNode[client] = append(byNode[client], key)
+	}
+	for client, nodeKeys := range byNode {
+		if err := client.Delete(ctx, nodeKeys...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *ClusterClient) Set(ctx context.Context, key string, r io.Reader, opts *SetOptions) error {
 	client, err := c.clientFor(key)
 	if err != nil {

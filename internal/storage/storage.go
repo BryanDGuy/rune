@@ -16,7 +16,7 @@ type Info struct {
 type Storage interface {
 	Get(key string) ([]byte, error)
 	Set(key string, value []byte, ttlSeconds int64) error
-	Delete(keys ...string) (int64, error)
+	Delete(keys ...string) error
 	Exists(keys ...string) (int64, error)
 	Info() (Info, error)
 	Close() error

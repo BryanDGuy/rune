@@ -88,6 +88,18 @@ func TestClusterClientRoutesSetAndGet(t *testing.T) {
 	require.ErrorIs(t, err, runesdk.ErrNotFound)
 }
 
+func TestClusterClientDelete(t *testing.T) {
+	c, cleanup := newTwoNodeCluster(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	require.NoError(t, c.Set(ctx, "del-key", bytes.NewReader([]byte("v")), nil))
+	require.NoError(t, c.Delete(ctx, "del-key"))
+
+	_, err := c.Get(ctx, "del-key")
+	require.ErrorIs(t, err, runesdk.ErrNotFound)
+}
+
 func TestClusterClientGetNotFound(t *testing.T) {
 	c, cleanup := newTwoNodeCluster(t)
 	defer cleanup()

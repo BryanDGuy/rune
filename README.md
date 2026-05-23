@@ -188,6 +188,7 @@ All configuration is via environment variables. All settings have sensible defau
 | `RUNE_STREAM_CHUNK_SIZE`     | `1048576`        | gRPC stream chunk size in bytes      |
 | `RUNE_GC_INTERVAL`           | `10m`            | BadgerDB value log GC interval       |
 | `RUNE_GC_DISCARD_RATIO`      | `0.5`            | GC discard ratio (0–1)               |
+| `RUNE_BLOCK_CACHE_SIZE`      | _(Badger default)_ | In-process block cache size (KB/MB/GB/TB); increases read throughput for hot-key workloads — e.g. `256MB` |
 | `RUNE_ETCD_ENDPOINTS`        | _(empty)_        | Comma-separated etcd endpoints; empty = single-node mode |
 | `RUNE_NODE_ID`               | hostname         | Stable identity for this node in the ring |
 | `RUNE_NODE_ADDR`             | `localhost:{RUNE_PORT}` | Advertised address peers use to reach this node |

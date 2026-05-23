@@ -37,6 +37,43 @@ func TestSDKSetGet(t *testing.T) {
 	assert.Equal(t, data, got)
 }
 
+func TestSDKSetWithCompression(t *testing.T) {
+	client, cleanup := newTestSDKClient(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	data := bytes.Repeat([]byte("compressible payload "), 100)
+	err := client.Set(ctx, "compressed-key", bytes.NewReader(data), &runesdk.SetOptions{Compress: true})
+	require.NoError(t, err)
+
+	rc, err := client.Get(ctx, "compressed-key")
+	require.NoError(t, err)
+	defer rc.Close()
+
+	got, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Equal(t, data, got)
+}
+
+func TestSDKDelete(t *testing.T) {
+	client, cleanup := newTestSDKClient(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	require.NoError(t, client.Set(ctx, "del-key", bytes.NewReader([]byte("v")), nil))
+	require.NoError(t, client.Delete(ctx, "del-key"))
+
+	_, err := client.Get(ctx, "del-key")
+	require.ErrorIs(t, err, runesdk.ErrNotFound)
+}
+
+func TestSDKDeleteMissingKeyIsNotAnError(t *testing.T) {
+	client, cleanup := newTestSDKClient(t)
+	defer cleanup()
+
+	require.NoError(t, client.Delete(context.Background(), "no-such-key"))
+}
+
 func TestSDKGetNotFound(t *testing.T) {
 	client, cleanup := newTestSDKClient(t)
 	defer cleanup()

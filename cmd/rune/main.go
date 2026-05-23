@@ -8,6 +8,7 @@ import (
 	"time"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
+	_ "google.golang.org/grpc/encoding/gzip"
 
 	"github.com/bryandguy/rune/internal/cluster"
 	"github.com/bryandguy/rune/internal/config"

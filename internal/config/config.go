@@ -22,6 +22,7 @@ type Config struct {
 	GCDiscardRatio     float64
 	Port               int
 	StreamChunkSize    int
+	BlockCacheSize     int64
 }
 
 // LoadConfig builds a Config from environment variables, falling back to defaults.
@@ -39,6 +40,7 @@ type Config struct {
 //	RUNE_GC_INTERVAL        (default: 10m)
 //	RUNE_GC_DISCARD_RATIO   (default: 0.5)
 //	RUNE_ETCD_ENDPOINTS     (default: "" — single-node mode; comma-separated in cluster mode)
+//	RUNE_BLOCK_CACHE_SIZE   (default: 0 — use Badger's built-in default; e.g. "256MB" enables a larger cache for read-heavy workloads)
 //	RUNE_NODE_ID            (default: hostname)
 //	RUNE_NODE_ADDR          (default: localhost:{RUNE_PORT})
 func LoadConfig() (*Config, error) {
@@ -101,6 +103,11 @@ func LoadConfig() (*Config, error) {
 	if v := os.Getenv("RUNE_GC_DISCARD_RATIO"); v != "" {
 		if cfg.GCDiscardRatio, err = strconv.ParseFloat(v, 64); err != nil {
 			return nil, fmt.Errorf("RUNE_GC_DISCARD_RATIO: %w", err)
+		}
+	}
+	if v := os.Getenv("RUNE_BLOCK_CACHE_SIZE"); v != "" {
+		if cfg.BlockCacheSize, err = parseBytes(v); err != nil {
+			return nil, fmt.Errorf("RUNE_BLOCK_CACHE_SIZE: %w", err)
 		}
 	}
 	if v := os.Getenv("RUNE_ETCD_ENDPOINTS"); v != "" {
