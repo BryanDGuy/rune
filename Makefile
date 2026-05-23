@@ -4,10 +4,10 @@ BINARY       := bin/rune
 BENCH_BINARY := bin/bench
 
 build:
-	@CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BINARY) ./cmd/rune
+	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BINARY) ./cmd/rune
 
 proto:
-	@protoc \
+	protoc \
 		--go_out=gen \
 		--go_opt=paths=source_relative \
 		--go-grpc_out=gen \
@@ -16,17 +16,17 @@ proto:
 		rune/v1/rune.proto
 
 tidy:
-	@go mod tidy
+	go mod tidy
 
 update-deps:
-	@go get -u ./...
-	@go mod tidy
+	go get -u ./...
+	go mod tidy
 
 test:
-	@go test -race $(shell go list ./... | grep -v /test/integration)
+	go test -race $(shell go list ./... | grep -v /test/integration)
 
 test-integration:
-	@go test -race ./test/integration/...
+	go test -race ./test/integration/...
 
 verify: lint fmt-check vet modernize
 
@@ -50,16 +50,16 @@ modernize-fix:
 
 # Local 3-node cluster + etcd via docker-compose (nodes on host ports 7946/7947/7948).
 cluster-up:
-	@docker compose up --build -d
+	docker compose up --build -d
 
 cluster-down:
-	@docker compose down
+	docker compose down
 
 # Run the benchmark inside the compose network so ClusterClient can resolve node addresses.
 # Requires the cluster to be running: make cluster-up
 bench:
-	@go build -o $(BENCH_BINARY) ./cmd/bench/
-	@docker run --rm \
+	go build -o $(BENCH_BINARY) ./cmd/bench/
+	docker run --rm \
 		--network rune_default \
 		-v $(PWD)/$(BENCH_BINARY):/bench \
 		debian:stable-slim /bench -etcd etcd:2379
