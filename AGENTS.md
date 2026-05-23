@@ -11,3 +11,7 @@ Only add a comment when the **why** is non-obvious: a hidden constraint, a subtl
 ## Code Style
 
 See [docs/STYLE.md](docs/STYLE.md) for API design and other coding conventions.
+
+## Before Every Commit
+
+Always run `make verify` before committing. It runs fmt, vet, modernize, and lint. Do not commit if any check fails.

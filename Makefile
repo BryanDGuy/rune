@@ -1,7 +1,9 @@
-.PHONY: build test test-integration lint fmt fmt-check vet tidy update-deps modernize modernize-fix proto cluster-up cluster-down bench
+.PHONY: build test test-integration verify lint fmt fmt-check vet tidy update-deps modernize modernize-fix proto cluster-up cluster-down bench
 
 BINARY       := bin/rune
 BENCH_BINARY := bin/bench
+
+verify: fmt-check vet modernize lint
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BINARY) ./cmd/rune

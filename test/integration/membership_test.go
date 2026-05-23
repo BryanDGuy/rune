@@ -49,7 +49,7 @@ func startEmbeddedEtcd(t *testing.T) string {
 
 func freePort(t *testing.T) int {
 	t.Helper()
-	l, err := net.Listen("tcp", "localhost:0")
+	l, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "localhost:0")
 	require.NoError(t, err)
 	port := l.Addr().(*net.TCPAddr).Port
 	_ = l.Close()
