@@ -40,21 +40,25 @@ var sizes = []struct {
 
 func main() {
 	flag.Parse()
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
 
+func run() error {
 	etcdClient, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{*etcdAddr},
 		DialTimeout: 5 * time.Second,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "etcd: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("etcd: %w", err)
 	}
 	defer etcdClient.Close()
 
 	client, err := runesdk.NewClusterClient(etcdClient, "")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cluster client: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("cluster client: %w", err)
 	}
 	defer client.Close()
 
@@ -69,8 +73,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  benching %s (%d iters)...\n", sz.label, sz.iters)
 		r, err := bench(client, sz.label, sz.bytes, sz.iters)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "  FAILED: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("%s: %w", sz.label, err)
 		}
 		fmt.Printf("%-10s  %-10s  %-10s  %-10s  %-10s  %-10.0f  %-10.0f\n",
 			sz.label,
@@ -79,11 +82,14 @@ func main() {
 			r.setThroughput, r.getThroughput,
 		)
 	}
+	return nil
 }
 
 func bench(client runesdk.RuneClient, label string, sizeBytes, iters int) (benchResult, error) {
 	data := make([]byte, sizeBytes)
-	rand.Read(data)
+	if _, err := rand.Read(data); err != nil {
+		return benchResult{}, fmt.Errorf("rand: %w", err)
+	}
 	ctx := context.Background()
 	mb := float64(sizeBytes) / (1 << 20)
 
@@ -92,7 +98,7 @@ func bench(client runesdk.RuneClient, label string, sizeBytes, iters int) (bench
 	if err := client.Set(ctx, warmupKey, bytes.NewReader(data), nil); err != nil {
 		return benchResult{}, fmt.Errorf("warmup set: %w", err)
 	}
-	if err := drain(client, ctx, warmupKey); err != nil {
+	if err := drain(ctx, client, warmupKey); err != nil {
 		return benchResult{}, fmt.Errorf("warmup get: %w", err)
 	}
 
@@ -112,7 +118,7 @@ func bench(client runesdk.RuneClient, label string, sizeBytes, iters int) (bench
 	for i := range iters {
 		key := fmt.Sprintf("bench-%s-%d", label, i)
 		start := time.Now()
-		if err := drain(client, ctx, key); err != nil {
+		if err := drain(ctx, client, key); err != nil {
 			return benchResult{}, fmt.Errorf("get iter %d: %w", i, err)
 		}
 		getDurs[i] = time.Since(start)
@@ -131,7 +137,7 @@ func bench(client runesdk.RuneClient, label string, sizeBytes, iters int) (bench
 	}, nil
 }
 
-func drain(client runesdk.RuneClient, ctx context.Context, key string) error {
+func drain(ctx context.Context, client runesdk.RuneClient, key string) error {
 	r, err := client.Get(ctx, key)
 	if err != nil {
 		return err
