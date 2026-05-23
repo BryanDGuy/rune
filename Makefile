@@ -3,16 +3,23 @@
 BINARY       := bin/rune
 BENCH_BINARY := bin/bench
 
-verify: fmt-check vet modernize lint
-
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BINARY) ./cmd/rune
+
+tidy:
+	go mod tidy
+
+update-deps:
+	go get -u ./...
+	go mod tidy
 
 test:
 	go test -race $(shell go list ./... | grep -v /test/integration)
 
 test-integration:
 	go test -race ./test/integration/...
+
+verify: lint fmt-check vet modernize
 
 lint:
 	golangci-lint run ./...
@@ -25,13 +32,6 @@ fmt-check:
 
 vet:
 	go vet ./...
-
-tidy:
-	go mod tidy
-
-update-deps:
-	go get -u ./...
-	go mod tidy
 
 modernize:
 	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest $(shell go list ./... | grep -v /gen/)
