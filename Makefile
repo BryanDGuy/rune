@@ -1,10 +1,10 @@
 .PHONY: build test lint fmt fmt-check vet tidy update-deps modernize modernize-fix proto cluster-up cluster-down bench
 
-BINARY       := bin/rune
-BENCH_BINARY := bin/bench
+RUNE_BINARY       := bin/rune
+BENCH_RUNE_BINARY := bin/bench
 
 build:
-	go build -o $(BINARY) ./cmd/rune
+	go build -o $(RUNE_BINARY) ./cmd/rune
 
 test:
 	go test -race ./...
@@ -53,8 +53,8 @@ cluster-down:
 # Run the benchmark inside the compose network so ClusterClient can resolve node addresses.
 # Requires the cluster to be running: make cluster-up
 bench:
-	go build -o $(BENCH_BINARY) ./cmd/bench/
+	go build -o $(BENCH_RUNE_BINARY) ./cmd/bench/
 	docker run --rm \
 		--network rune_default \
-		-v $(PWD)/$(BENCH_BINARY):/bench \
+		-v $(PWD)/$(BENCH_RUNE_BINARY):/bench \
 		debian:stable-slim /bench -etcd etcd:2379
