@@ -74,6 +74,7 @@ RUNE_PORT=8080 RUNE_DATA_DIR=/tmp/rune ./rune
 
 ```go
 import (
+    "errors"
     runesdk "github.com/bryandguy/rune/sdk/go"
     "google.golang.org/grpc"
     "google.golang.org/grpc/credentials/insecure"
@@ -94,16 +95,24 @@ err = client.Set(ctx, "session:abc", reader, &runesdk.SetOptions{TTL: 10 * time.
 r, err := client.Get(ctx, "menu:123")
 if errors.Is(err, runesdk.ErrNotFound) {
     // cache miss — fetch from source
+    return
 }
+if err != nil { ... }
 defer r.Close()
-io.Copy(dest, r) // stream to destination without buffering the full value
+io.Copy(dest, r) // client streams chunk-by-chunk, never buffers the full value
 ```
 
 **Cluster mode** (requires etcd):
 
 ```go
+import (
+    runesdk "github.com/bryandguy/rune/sdk/go"
+    clientv3 "go.etcd.io/etcd/client/v3"
+)
+
 etcdClient, err := clientv3.New(clientv3.Config{Endpoints: []string{"etcd:2379"}})
 if err != nil { ... }
+defer etcdClient.Close()
 
 client, err := runesdk.NewClusterClient(etcdClient, "")
 if err != nil { ... }
@@ -122,6 +131,39 @@ In cluster mode you can connect to **any** node: if it doesn't own the requested
 To avoid that hop, read the **`x-rune-owner`** response header. On every Get/Set in cluster mode, the node sets this header to the advertised address of the node that owns the key. A client can cache `key → address` and connect to the owner directly next time, getting the same owner-aware routing as `ClusterClient` without watching etcd or reimplementing the hash ring. Stale hints are self-correcting: if the ring has since changed, the new entry node simply forwards again and returns an updated `x-rune-owner`.
 
 This requires the client to have direct network reachability to every node (the same constraint as `ClusterClient`).
+
+## runectl
+
+A command-line client for inspecting and operating a running Rune node or cluster.
+
+```bash
+# Check connectivity
+runectl ping
+
+# Store a value from a file, or pipe from stdin
+runectl set mykey /path/to/file
+cat data.bin | runectl set mykey -
+
+# Store with a TTL
+runectl set mykey /path/to/file -ttl 10m
+
+# Retrieve a value
+runectl get mykey > output.bin
+
+# Delete one or more keys
+runectl delete key1 key2
+
+# Check how many of these keys exist
+runectl exists key1 key2
+
+# Server storage and cache stats
+runectl info
+
+# Which node owns a key (cluster mode)
+runectl route mykey
+```
+
+The default address is `localhost:7946`. Override with `-addr <host:port>` or `$RUNE_ADDR`.
 
 ## Configuration
 
