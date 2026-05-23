@@ -12,10 +12,10 @@ Because Rune's interface is gRPC, it also makes BadgerDB's large-value storage a
 
 ## How it works
 
-Each Rune node is a gRPC server backed by an embedded BadgerDB instance. Clients use the Go SDK (additional language SDKs follow from the proto definition) and stream values in chunks — callers get an `io.Reader` back from `Get`, so processing can begin before the full value has transferred.
+Each Rune node is a gRPC server backed by an embedded BadgerDB instance. Clients use the Go SDK and stream values in chunks — callers get an `io.Reader` back from `Get`, so processing can begin before the full value has transferred.
 
 ```
-Pods (Go SDK / future SDKs)
+Pods (Go SDK / direct gRPC)
         │ gRPC + HTTP/2 streaming
         ▼
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
