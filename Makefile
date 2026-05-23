@@ -1,4 +1,4 @@
-.PHONY: build test test-integration verify lint fmt fmt-check vet tidy update-deps modernize modernize-fix proto cluster-up cluster-down bench
+.PHONY: build proto tidy update-deps test test-integration verify lint fmt fmt-check vet modernize modernize-fix cluster-up cluster-down bench
 
 BINARY       := bin/rune
 BENCH_BINARY := bin/bench
