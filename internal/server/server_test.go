@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -76,6 +78,47 @@ func TestHealthReadiness(t *testing.T) {
 	resp, err := hc.Check(context.Background(), &healthpb.HealthCheckRequest{Service: "rune"})
 	require.NoError(t, err)
 	assert.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.Status)
+}
+
+func TestReadinessNotServingAfterStop(t *testing.T) {
+	cfg := testutil.BaseConfig(t)
+	store, err := storage.NewBadgerStore(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+
+	lis := bufconn.Listen(bufSize)
+	srv := server.New(cfg, store, nil, nil)
+	srv.StartOnListener(lis)
+
+	conn, err := grpc.NewClient(
+		"passthrough://readiness-stop-test",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return lis.DialContext(ctx)
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	hc := healthpb.NewHealthClient(conn)
+
+	resp, err := hc.Check(context.Background(), &healthpb.HealthCheckRequest{Service: "rune"})
+	require.NoError(t, err)
+	assert.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.Status)
+
+	// Stop marks readiness NOT_SERVING before draining — existing connection still works.
+	done := make(chan struct{})
+	go func() {
+		srv.Stop()
+		close(done)
+	}()
+
+	assert.Eventually(t, func() bool {
+		resp, err := hc.Check(context.Background(), &healthpb.HealthCheckRequest{Service: "rune"})
+		return err == nil && resp.Status == healthpb.HealthCheckResponse_NOT_SERVING
+	}, 5*time.Second, 10*time.Millisecond)
+
+	<-done
 }
 
 func TestSetRequiresHeaderFirst(t *testing.T) {

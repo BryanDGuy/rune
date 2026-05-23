@@ -12,17 +12,20 @@ import (
 	"github.com/bryandguy/rune/internal/logging"
 	"github.com/bryandguy/rune/internal/storage"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/stats"
 )
 
 type Server struct {
-	cfg        *config.Config
-	store      storage.Storage
-	logger     *logging.Logger
-	membership cluster.MembershipIface // nil in single-node mode
-	dialer     *cluster.PeerDialer     // nil in single-node mode
-	grpcServer *grpc.Server
-	tracker    *connTracker
+	cfg          *config.Config
+	store        storage.Storage
+	logger       *logging.Logger
+	membership   cluster.MembershipIface // nil in single-node mode
+	dialer       *cluster.PeerDialer     // nil in single-node mode
+	grpcServer   *grpc.Server
+	healthServer *health.Server
+	tracker      *connTracker
 }
 
 // ClusterOptions wires a Server into a cluster. Membership and Dialer must both
@@ -64,15 +67,18 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("listen: %w", err)
 	}
 	go func() { _ = s.grpcServer.Serve(lis) }()
+	s.healthServer.SetServingStatus("rune", healthpb.HealthCheckResponse_SERVING)
 	return nil
 }
 
 // StartOnListener serves on an existing listener (useful for testing with bufconn).
 func (s *Server) StartOnListener(lis net.Listener) {
 	go func() { _ = s.grpcServer.Serve(lis) }()
+	s.healthServer.SetServingStatus("rune", healthpb.HealthCheckResponse_SERVING)
 }
 
 func (s *Server) Stop() {
+	s.healthServer.SetServingStatus("rune", healthpb.HealthCheckResponse_NOT_SERVING)
 	s.grpcServer.GracefulStop()
 }
 

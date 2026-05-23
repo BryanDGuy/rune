@@ -214,7 +214,7 @@ JSON logs via `log/slog`: the standard `time`/`level`/`msg` plus structured attr
 ### Health Checks
 Two gRPC health services registered via the standard gRPC health protocol, used by Kubernetes probes:
 - `""` (empty string) — Liveness: process is alive, always SERVING
-- `"rune"` — Readiness: currently always SERVING; a future improvement would gate this on BadgerDB being open and etcd connected
+- `"rune"` — Readiness: NOT_SERVING until the listener is up, SERVING once started, NOT_SERVING again when Stop is called before draining begins
 
 ## What Rune Is Not
 
