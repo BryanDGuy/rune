@@ -10,6 +10,7 @@ import (
 	runev1 "github.com/bryandguy/rune/gen/rune/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	_ "google.golang.org/grpc/encoding/gzip" // registers gzip compressor for SetOptions.Compress
 	"google.golang.org/grpc/status"
 )
 
@@ -27,11 +28,15 @@ func NewClient(conn *grpc.ClientConn) *Client {
 // Chunked via client-streaming gRPC in 1MB pieces.
 func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts *SetOptions) error {
 	var ttl time.Duration
+	var callOpts []grpc.CallOption
 	if opts != nil {
 		ttl = opts.TTL
+		if opts.Compress {
+			callOpts = append(callOpts, grpc.UseCompressor("gzip"))
+		}
 	}
 
-	stream, err := c.grpc.Set(ctx)
+	stream, err := c.grpc.Set(ctx, callOpts...)
 	if err != nil {
 		return err
 	}
@@ -95,6 +100,11 @@ func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	}
 
 	return &streamReader{stream: stream, buf: resp.Chunk, cancel: cancel}, nil
+}
+
+func (c *Client) Delete(ctx context.Context, keys ...string) error {
+	_, err := c.grpc.Delete(ctx, &runev1.DeleteRequest{Keys: keys})
+	return err
 }
 
 func (c *Client) Close() error {

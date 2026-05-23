@@ -192,9 +192,8 @@ func TestDelete(t *testing.T) {
 		mustSet(t, client, key, []byte("v"))
 	}
 
-	resp, err := client.Delete(ctx, &runev1.DeleteRequest{Keys: []string{"a", "b", "missing"}})
+	_, err := client.Delete(ctx, &runev1.DeleteRequest{Keys: []string{"a", "b", "missing"}})
 	require.NoError(t, err)
-	assert.Equal(t, int64(2), resp.Deleted)
 }
 
 func TestExists(t *testing.T) {

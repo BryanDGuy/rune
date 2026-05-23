@@ -187,11 +187,10 @@ func (h *handler) forwardSet(ctx context.Context, peerAddr string, hdr *runev1.S
 }
 
 func (h *handler) Delete(_ context.Context, req *runev1.DeleteRequest) (*runev1.DeleteResponse, error) {
-	n, err := h.srv.store.Delete(req.Keys...)
-	if err != nil {
+	if err := h.srv.store.Delete(req.Keys...); err != nil {
 		return nil, status.Errorf(codes.Internal, "delete: %v", err)
 	}
-	return &runev1.DeleteResponse{Deleted: n}, nil
+	return &runev1.DeleteResponse{}, nil
 }
 
 func (h *handler) Exists(_ context.Context, req *runev1.ExistsRequest) (*runev1.ExistsResponse, error) {

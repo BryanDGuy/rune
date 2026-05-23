@@ -27,6 +27,9 @@ type BadgerStore struct {
 func NewBadgerStore(cfg *config.Config) (*BadgerStore, error) {
 	opts := badger.DefaultOptions(cfg.DataDir)
 	opts.Logger = nil
+	if cfg.BlockCacheSize > 0 {
+		opts.BlockCacheSize = cfg.BlockCacheSize
+	}
 	db, err := badger.Open(opts)
 	if err != nil {
 		return nil, fmt.Errorf("open badger: %w", err)
@@ -95,32 +98,21 @@ func (s *BadgerStore) Set(key string, value []byte, ttlSeconds int64) error {
 	return nil
 }
 
-func (s *BadgerStore) Delete(keys ...string) (int64, error) {
-	var deleted []string
-	err := s.db.Update(func(txn *badger.Txn) error {
-		deleted = deleted[:0]
+func (s *BadgerStore) Delete(keys ...string) error {
+	if err := s.db.Update(func(txn *badger.Txn) error {
 		for _, key := range keys {
-			_, err := txn.Get([]byte(key))
-			if errors.Is(err, badger.ErrKeyNotFound) {
-				continue
-			}
-			if err != nil {
+			if err := txn.Delete([]byte(key)); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
 				return err
 			}
-			if err := txn.Delete([]byte(key)); err != nil {
-				return err
-			}
-			deleted = append(deleted, key)
 		}
 		return nil
-	})
-	if err != nil {
-		return 0, err
+	}); err != nil {
+		return err
 	}
-	for _, key := range deleted {
+	for _, key := range keys {
 		s.eviction.remove(key)
 	}
-	return int64(len(deleted)), nil
+	return nil
 }
 
 func (s *BadgerStore) Exists(keys ...string) (int64, error) {

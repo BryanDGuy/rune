@@ -103,6 +103,27 @@ func (c *ClusterClient) clientFor(key string) (*Client, error) {
 	return client, nil
 }
 
+// Delete removes keys from the cluster. Keys are grouped by owning node and
+// deleted in one RPC per node. This is not atomic across nodes: if one node
+// fails after others have already succeeded, the caller receives an error but
+// the successful deletions are not rolled back.
+func (c *ClusterClient) Delete(ctx context.Context, keys ...string) error {
+	byNode := make(map[*Client][]string)
+	for _, key := range keys {
+		client, err := c.clientFor(key)
+		if err != nil {
+			return err
+		}
+		byNode[client] = append(byNode[client], key)
+	}
+	for client, nodeKeys := range byNode {
+		if err := client.Delete(ctx, nodeKeys...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *ClusterClient) Set(ctx context.Context, key string, r io.Reader, opts *SetOptions) error {
 	client, err := c.clientFor(key)
 	if err != nil {

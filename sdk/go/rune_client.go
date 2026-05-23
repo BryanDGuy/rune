@@ -10,7 +10,8 @@ import (
 var ErrNotFound = errors.New("key not found")
 
 type SetOptions struct {
-	TTL time.Duration
+	TTL      time.Duration
+	Compress bool
 }
 
 // RuneClient is the common interface satisfied by both Client (single-node) and
@@ -18,5 +19,6 @@ type SetOptions struct {
 type RuneClient interface {
 	Set(ctx context.Context, key string, r io.Reader, opts *SetOptions) error
 	Get(ctx context.Context, key string) (io.ReadCloser, error)
+	Delete(ctx context.Context, keys ...string) error
 	Close() error
 }

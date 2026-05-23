@@ -96,3 +96,16 @@ func TestConfigNodeAddrDefaultsToLocalhostPort(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "localhost:7946", cfg.NodeAddr)
 }
+
+func TestBlockCacheSizeDefaultsToZero(t *testing.T) {
+	cfg, err := LoadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), cfg.BlockCacheSize)
+}
+
+func TestBlockCacheSizeEnvOverride(t *testing.T) {
+	t.Setenv("RUNE_BLOCK_CACHE_SIZE", "256MB")
+	cfg, err := LoadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, int64(256*1024*1024), cfg.BlockCacheSize)
+}

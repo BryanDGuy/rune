@@ -52,11 +52,9 @@ func TestBadgerDelete(t *testing.T) {
 	require.NoError(t, s.Set("k1", []byte("v"), 0))
 	require.NoError(t, s.Set("k2", []byte("v"), 0))
 
-	n, err := s.Delete("k1", "k2", "missing")
-	require.NoError(t, err)
-	assert.Equal(t, int64(2), n)
+	require.NoError(t, s.Delete("k1", "k2", "missing"))
 
-	_, err = s.Get("k1")
+	_, err := s.Get("k1")
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
@@ -122,6 +120,19 @@ func TestGCConcurrentCallsSkipped(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("runGC did not skip immediately when gcRunning was true")
 	}
+}
+
+func TestBadgerBlockCacheEnabled(t *testing.T) {
+	cfg := baseStorageTestConfig(t)
+	cfg.BlockCacheSize = 32 * 1024 * 1024 // 32MB
+	s, err := NewBadgerStore(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, s.Close()) })
+
+	require.NoError(t, s.Set("k1", []byte("hello"), 0))
+	got, err := s.Get("k1")
+	require.NoError(t, err)
+	assert.Equal(t, []byte("hello"), got)
 }
 
 func TestGCLoopStopsOnCancel(t *testing.T) {
