@@ -3,12 +3,12 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"flag"
 	"fmt"
 	"io"
-	"crypto/rand"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -118,8 +118,8 @@ func bench(client runesdk.RuneClient, label string, sizeBytes, iters int) (bench
 		getDurs[i] = time.Since(start)
 	}
 
-	sort.Slice(setDurs, func(i, j int) bool { return setDurs[i] < setDurs[j] })
-	sort.Slice(getDurs, func(i, j int) bool { return getDurs[i] < getDurs[j] })
+	slices.Sort(setDurs)
+	slices.Sort(getDurs)
 
 	return benchResult{
 		setP50:        pct(setDurs, 50),
@@ -142,7 +142,7 @@ func drain(client runesdk.RuneClient, ctx context.Context, key string) error {
 }
 
 func pct(sorted []time.Duration, p int) time.Duration {
-	idx := (len(sorted)-1)*p/100
+	idx := (len(sorted) - 1) * p / 100
 	return sorted[idx]
 }
 
