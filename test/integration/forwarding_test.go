@@ -1,4 +1,4 @@
-package cluster_test
+package integration_test
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/bryandguy/rune/internal/testutil"
+	"github.com/bryandguy/rune/test/testutil"
 	runesdk "github.com/bryandguy/rune/sdk/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

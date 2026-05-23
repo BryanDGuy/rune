@@ -1,6 +1,6 @@
 //go:build integration
 
-package cluster_test
+package integration_test
 
 import (
 	"fmt"
