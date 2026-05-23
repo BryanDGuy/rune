@@ -99,15 +99,20 @@ func (s *BadgerStore) Set(key string, value []byte, ttlSeconds int64) error {
 }
 
 func (s *BadgerStore) Delete(keys ...string) error {
-	return s.db.Update(func(txn *badger.Txn) error {
+	if err := s.db.Update(func(txn *badger.Txn) error {
 		for _, key := range keys {
 			if err := txn.Delete([]byte(key)); err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
 				return err
 			}
-			s.eviction.remove(key)
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	for _, key := range keys {
+		s.eviction.remove(key)
+	}
+	return nil
 }
 
 func (s *BadgerStore) Exists(keys ...string) (int64, error) {
