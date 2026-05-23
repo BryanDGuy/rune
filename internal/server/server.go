@@ -67,18 +67,18 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("listen: %w", err)
 	}
 	go func() { _ = s.grpcServer.Serve(lis) }()
-	s.healthServer.SetServingStatus("rune", healthpb.HealthCheckResponse_SERVING)
+	s.healthServer.SetServingStatus(ReadinessService, healthpb.HealthCheckResponse_SERVING)
 	return nil
 }
 
 // StartOnListener serves on an existing listener (useful for testing with bufconn).
 func (s *Server) StartOnListener(lis net.Listener) {
 	go func() { _ = s.grpcServer.Serve(lis) }()
-	s.healthServer.SetServingStatus("rune", healthpb.HealthCheckResponse_SERVING)
+	s.healthServer.SetServingStatus(ReadinessService, healthpb.HealthCheckResponse_SERVING)
 }
 
 func (s *Server) Stop() {
-	s.healthServer.SetServingStatus("rune", healthpb.HealthCheckResponse_NOT_SERVING)
+	s.healthServer.SetServingStatus(ReadinessService, healthpb.HealthCheckResponse_NOT_SERVING)
 	s.grpcServer.GracefulStop()
 }
 

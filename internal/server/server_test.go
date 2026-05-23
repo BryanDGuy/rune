@@ -75,7 +75,7 @@ func TestHealthReadiness(t *testing.T) {
 	defer cleanup()
 
 	hc := healthpb.NewHealthClient(conn)
-	resp, err := hc.Check(context.Background(), &healthpb.HealthCheckRequest{Service: "rune"})
+	resp, err := hc.Check(context.Background(), &healthpb.HealthCheckRequest{Service: server.ReadinessService})
 	require.NoError(t, err)
 	assert.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.Status)
 }
@@ -102,7 +102,7 @@ func TestReadinessNotServingAfterStop(t *testing.T) {
 
 	hc := healthpb.NewHealthClient(conn)
 
-	resp, err := hc.Check(context.Background(), &healthpb.HealthCheckRequest{Service: "rune"})
+	resp, err := hc.Check(context.Background(), &healthpb.HealthCheckRequest{Service: server.ReadinessService})
 	require.NoError(t, err)
 	assert.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.Status)
 
@@ -113,9 +113,10 @@ func TestReadinessNotServingAfterStop(t *testing.T) {
 		close(done)
 	}()
 
-	assert.Eventually(t, func() bool {
-		resp, err := hc.Check(context.Background(), &healthpb.HealthCheckRequest{Service: "rune"})
-		return err == nil && resp.Status == healthpb.HealthCheckResponse_NOT_SERVING
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err := hc.Check(context.Background(), &healthpb.HealthCheckRequest{Service: server.ReadinessService})
+		require.NoError(c, err)
+		assert.Equal(c, healthpb.HealthCheckResponse_NOT_SERVING, resp.Status)
 	}, 5*time.Second, 10*time.Millisecond)
 
 	<-done
