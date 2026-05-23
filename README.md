@@ -70,11 +70,10 @@ RUNE_PORT=8080 RUNE_DATA_DIR=/tmp/rune ./rune
 
 ## Go SDK
 
-**Single-node:**
+### Connecting (single-node)
 
 ```go
 import (
-    "errors"
     runesdk "github.com/bryandguy/rune/sdk/go"
     "google.golang.org/grpc"
     "google.golang.org/grpc/credentials/insecure"
@@ -84,6 +83,34 @@ conn, err := grpc.NewClient("localhost:7946", grpc.WithTransportCredentials(inse
 if err != nil { ... }
 client := runesdk.NewClient(conn)
 defer client.Close()
+```
+
+### Connecting (cluster mode, requires etcd)
+
+```go
+import (
+    runesdk "github.com/bryandguy/rune/sdk/go"
+    clientv3 "go.etcd.io/etcd/client/v3"
+)
+
+etcdClient, err := clientv3.New(clientv3.Config{Endpoints: []string{"etcd:2379"}})
+if err != nil { ... }
+defer etcdClient.Close()
+
+client, err := runesdk.NewClusterClient(etcdClient, "")
+if err != nil { ... }
+defer client.Close()
+```
+
+`ClusterClient` routes each key to its owning node automatically. The `Set`/`Get` interface is identical to the single-node client.
+
+### Using the client
+
+```go
+import (
+    "errors"
+    runesdk "github.com/bryandguy/rune/sdk/go"
+)
 
 // Store a value
 err = client.Set(ctx, "menu:123", file, nil)
@@ -99,27 +126,7 @@ if errors.Is(err, runesdk.ErrNotFound) {
 }
 if err != nil { ... }
 defer r.Close()
-io.Copy(dest, r) // client streams chunk-by-chunk, never buffers the full value
-```
-
-**Cluster mode** (requires etcd):
-
-```go
-import (
-    runesdk "github.com/bryandguy/rune/sdk/go"
-    clientv3 "go.etcd.io/etcd/client/v3"
-)
-
-etcdClient, err := clientv3.New(clientv3.Config{Endpoints: []string{"etcd:2379"}})
-if err != nil { ... }
-defer etcdClient.Close()
-
-client, err := runesdk.NewClusterClient(etcdClient, "")
-if err != nil { ... }
-defer client.Close()
-
-// Same Set/Get interface — ClusterClient routes to the correct node automatically
-err = client.Set(ctx, "menu:123", file, nil)
+io.Copy(dest, r) // streams chunk-by-chunk, never buffers the full value
 ```
 
 ## Direct gRPC access (non-Go clients)
