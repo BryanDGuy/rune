@@ -40,6 +40,21 @@ Pods (Go SDK / future SDKs)
 
 Single-node mode requires no etcd — just run one node. In cluster mode, set `RUNE_ETCD_ENDPOINTS` and each node registers itself, watches for peers, and routes misrouted requests to the owning node. The SDK's `ClusterClient` watches etcd and routes directly to the owning node, skipping the server-side hop entirely. Each key lives on a single owning node; if that node goes down its keys become cache misses until refetched from source.
 
+## Performance
+
+Measured on a 3-node cluster over a Docker bridge network (loopback). Production in-cluster Kubernetes performance will vary by network fabric; the Docker numbers are a conservative floor.
+
+| Blob Size | Set p50 | Set p99 | Get p50 | Get p99 | Set MB/s | Get MB/s |
+|-----------|---------|---------|---------|---------|----------|----------|
+| 1 MB      | 3.0ms   | 6.0ms   | 1.0ms   | 1.0ms   | 297      | 774      |
+| 10 MB     | 18.0ms  | 24.0ms  | 7.0ms   | 12.0ms  | 541      | 1267     |
+| 100 MB    | 183ms   | 221ms   | 63.0ms  | 72.0ms  | 544      | 1573     |
+| 500 MB    | 1.23s   | 1.39s   | 342ms   | 939ms   | 406      | 1461     |
+
+For comparison, a GET from S3 in the same region typically runs 200ms–2s for 100MB depending on pod location and S3 load. Rune's 63ms p50 at 100MB is a 3–30× improvement — and unlike S3, it doesn't add per-request cost or egress charges.
+
+To reproduce: `make cluster-up && make bench`
+
 ## Quick start
 
 ```bash
