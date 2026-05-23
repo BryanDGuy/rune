@@ -12,10 +12,10 @@ Because Rune's interface is gRPC, it also makes BadgerDB's large-value storage a
 
 ## How it works
 
-Each Rune node is a gRPC server backed by an embedded BadgerDB instance. Clients use the Go SDK (additional language SDKs follow from the proto definition) and stream values in chunks — callers get an `io.Reader` back from `Get`, so processing can begin before the full value has transferred.
+Each Rune node is a gRPC server backed by an embedded BadgerDB instance. Clients use the Go SDK and stream values in chunks — callers get an `io.Reader` back from `Get`, so processing can begin before the full value has transferred.
 
 ```
-Pods (Go SDK / future SDKs)
+Pods (Go SDK / direct gRPC)
         │ gRPC + HTTP/2 streaming
         ▼
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
@@ -70,7 +70,7 @@ RUNE_PORT=8080 RUNE_DATA_DIR=/tmp/rune ./rune
 
 ## Go SDK
 
-**Single-node:**
+### Connecting (single-node)
 
 ```go
 import (
@@ -83,6 +83,34 @@ conn, err := grpc.NewClient("localhost:7946", grpc.WithTransportCredentials(inse
 if err != nil { ... }
 client := runesdk.NewClient(conn)
 defer client.Close()
+```
+
+### Connecting (cluster mode, requires etcd)
+
+```go
+import (
+    runesdk "github.com/bryandguy/rune/sdk/go"
+    clientv3 "go.etcd.io/etcd/client/v3"
+)
+
+etcdClient, err := clientv3.New(clientv3.Config{Endpoints: []string{"etcd:2379"}})
+if err != nil { ... }
+defer etcdClient.Close()
+
+client, err := runesdk.NewClusterClient(etcdClient, "")
+if err != nil { ... }
+defer client.Close()
+```
+
+`ClusterClient` routes each key to its owning node automatically. The `Set`/`Get` interface is identical to the single-node client.
+
+### Using the client
+
+```go
+import (
+    "errors"
+    runesdk "github.com/bryandguy/rune/sdk/go"
+)
 
 // Store a value
 err = client.Set(ctx, "menu:123", file, nil)
@@ -94,23 +122,11 @@ err = client.Set(ctx, "session:abc", reader, &runesdk.SetOptions{TTL: 10 * time.
 r, err := client.Get(ctx, "menu:123")
 if errors.Is(err, runesdk.ErrNotFound) {
     // cache miss — fetch from source
+    return
 }
+if err != nil { ... }
 defer r.Close()
-io.Copy(dest, r) // stream to destination without buffering the full value
-```
-
-**Cluster mode** (requires etcd):
-
-```go
-etcdClient, err := clientv3.New(clientv3.Config{Endpoints: []string{"etcd:2379"}})
-if err != nil { ... }
-
-client, err := runesdk.NewClusterClient(etcdClient, "")
-if err != nil { ... }
-defer client.Close()
-
-// Same Set/Get interface — ClusterClient routes to the correct node automatically
-err = client.Set(ctx, "menu:123", file, nil)
+io.Copy(dest, r) // streams chunk-by-chunk, never buffers the full value
 ```
 
 ## Direct gRPC access (non-Go clients)
@@ -122,6 +138,39 @@ In cluster mode you can connect to **any** node: if it doesn't own the requested
 To avoid that hop, read the **`x-rune-owner`** response header. On every Get/Set in cluster mode, the node sets this header to the advertised address of the node that owns the key. A client can cache `key → address` and connect to the owner directly next time, getting the same owner-aware routing as `ClusterClient` without watching etcd or reimplementing the hash ring. Stale hints are self-correcting: if the ring has since changed, the new entry node simply forwards again and returns an updated `x-rune-owner`.
 
 This requires the client to have direct network reachability to every node (the same constraint as `ClusterClient`).
+
+## runectl
+
+A command-line client for inspecting and operating a running Rune node or cluster.
+
+```bash
+# Check connectivity
+runectl ping
+
+# Store a value from a file, or pipe from stdin
+runectl set mykey /path/to/file
+cat data.bin | runectl set mykey -
+
+# Store with a TTL
+runectl set mykey /path/to/file -ttl 10m
+
+# Retrieve a value
+runectl get mykey > output.bin
+
+# Delete one or more keys
+runectl delete key1 key2
+
+# Check how many of these keys exist
+runectl exists key1 key2
+
+# Server storage and cache stats
+runectl info
+
+# Which node owns a key (cluster mode)
+runectl route mykey
+```
+
+The default address is `localhost:7946`. Override with `-addr <host:port>` or `$RUNE_ADDR`.
 
 ## Configuration
 

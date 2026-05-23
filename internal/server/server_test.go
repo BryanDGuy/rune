@@ -12,7 +12,7 @@ import (
 	runev1 "github.com/bryandguy/rune/gen/rune/v1"
 	"github.com/bryandguy/rune/internal/server"
 	"github.com/bryandguy/rune/internal/storage"
-	"github.com/bryandguy/rune/internal/testutil"
+	"github.com/bryandguy/rune/test/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"

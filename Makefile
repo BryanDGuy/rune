@@ -1,13 +1,16 @@
-.PHONY: build test lint fmt fmt-check vet tidy update-deps modernize modernize-fix proto cluster-up cluster-down bench
+.PHONY: build test test-integration lint fmt fmt-check vet tidy update-deps modernize modernize-fix proto cluster-up cluster-down bench
 
 BINARY       := bin/rune
 BENCH_BINARY := bin/bench
 
 build:
-	go build -o $(BINARY) ./cmd/rune
+	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BINARY) ./cmd/rune
 
 test:
 	go test -race ./...
+
+test-integration:
+	go test -race -tags integration ./...
 
 lint:
 	golangci-lint run ./...

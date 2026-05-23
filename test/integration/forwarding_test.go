@@ -1,4 +1,6 @@
-package cluster_test
+//go:build integration
+
+package integration_test
 
 import (
 	"bytes"
@@ -6,8 +8,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/bryandguy/rune/internal/testutil"
 	runesdk "github.com/bryandguy/rune/sdk/go"
+	"github.com/bryandguy/rune/test/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

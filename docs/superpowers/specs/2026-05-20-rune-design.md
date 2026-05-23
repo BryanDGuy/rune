@@ -7,16 +7,16 @@
 
 Rune is a gRPC-based cache server optimized for large values (1MB+). It is backed by BadgerDB and deployable as a shared cluster across Kubernetes pods. The core problem it solves: BadgerDB is file-local (can't be shared across pods), and Redis degrades severely with large values. Rune fills the gap — large-blob support with a centralized, shared architecture.
 
-Clients interact with Rune via an official Go SDK (with additional language SDKs to follow). The SDK exposes a streaming interface — callers receive a `Reader` rather than a `[]byte`, allowing processing to begin before a value is fully transferred. Value size is bounded by available disk space, network bandwidth, and server RAM (the server holds each value fully in memory during a Get or Set — see §3).
+Clients interact with Rune via the Go SDK. The SDK exposes a streaming interface — callers receive a `Reader` rather than a `[]byte`, allowing processing to begin before a value is fully transferred. Value size is bounded by available disk space, network bandwidth, and server RAM (the server holds each value fully in memory during a Get or Set — see §3).
 
-Because BadgerDB is a pure Go embedded library, it is inaccessible to non-Go runtimes. Rune's gRPC layer changes this — the proto definition is language-agnostic, and SDKs for Python, Node, Rust, Java, and others can be generated from it. Rune effectively makes BadgerDB's large-value storage available to any language runtime, not just Go.
+Because Rune's interface is plain gRPC, non-Go clients can generate a client from the proto definition and call Rune directly without the SDK.
 
 **Elevator pitch:** A shared cache built for large files — stream blobs across pods the way Redis streams strings, optimized for the large-value workloads where Redis falls apart.
 
 ## Architecture
 
 ```
-Pods (Go SDK / future SDKs)
+Pods (Go SDK / direct gRPC)
         │ gRPC + HTTP/2 streaming
         ▼
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
@@ -72,7 +72,7 @@ reader, err := client.Get(ctx, "menu:123")
 io.Copy(dest, reader) // streams from server
 ```
 
-Additional language SDKs (Python, Node, Rust) follow the same pattern via generated proto clients.
+Non-Go clients can generate a client from the proto definition and call Rune directly.
 
 ### 2. Router
 
