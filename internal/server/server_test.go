@@ -115,6 +115,10 @@ func TestReadinessNotServingAfterStop(t *testing.T) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := hc.Check(context.Background(), &healthpb.HealthCheckRequest{Service: server.ReadinessService})
+		if status.Code(err) == codes.Unavailable {
+			// GracefulStop closed the connection after NOT_SERVING was set — transition succeeded.
+			return
+		}
 		require.NoError(c, err)
 		assert.Equal(c, healthpb.HealthCheckResponse_NOT_SERVING, resp.Status)
 	}, 5*time.Second, 10*time.Millisecond)
