@@ -2,7 +2,7 @@
 
 > **Not production ready.** Rune is under active development. APIs may change without notice and there are no stability guarantees yet.
 
-A shared cache built for large files — stream blobs of any size across pods the way Redis streams strings.
+A shared cache built for large files — stream blobs across pods the way Redis streams strings, optimized for the large-value workloads where Redis falls apart.
 
 ## Why
 
@@ -69,7 +69,7 @@ if err != nil { ... }
 client := runesdk.NewClient(conn)
 defer client.Close()
 
-// Store a value (any io.Reader, any size)
+// Store a value
 err = client.Set(ctx, "menu:123", file, nil)
 
 // Store with TTL
@@ -134,8 +134,8 @@ Rune registers the standard [gRPC Health Checking Protocol](https://github.com/g
 
 | Service | Meaning |
 |---------|---------|
-| `""` (empty) | Liveness — process is alive |
-| `"rune"` | Readiness — node is ready to serve |
+| `""` (empty) | Liveness — process is alive (always SERVING) |
+| `"rune"` | Readiness — SERVING once the server is up, NOT_SERVING during shutdown |
 
 ## What Rune is not
 

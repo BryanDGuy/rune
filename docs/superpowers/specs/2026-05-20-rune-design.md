@@ -7,11 +7,11 @@
 
 Rune is a gRPC-based cache server optimized for large values (1MB+). It is backed by BadgerDB and deployable as a shared cluster across Kubernetes pods. The core problem it solves: BadgerDB is file-local (can't be shared across pods), and Redis degrades severely with large values. Rune fills the gap — large-blob support with a centralized, shared architecture.
 
-Clients interact with Rune via an official Go SDK (with additional language SDKs to follow). The SDK exposes a streaming interface — callers receive a `Reader` rather than a `[]byte`, allowing processing to begin before a value is fully transferred. Value size is bounded only by available disk space and network bandwidth.
+Clients interact with Rune via an official Go SDK (with additional language SDKs to follow). The SDK exposes a streaming interface — callers receive a `Reader` rather than a `[]byte`, allowing processing to begin before a value is fully transferred. Value size is bounded by available disk space, network bandwidth, and server RAM (the server holds each value fully in memory during a Get or Set — see §3).
 
 Because BadgerDB is a pure Go embedded library, it is inaccessible to non-Go runtimes. Rune's gRPC layer changes this — the proto definition is language-agnostic, and SDKs for Python, Node, Rust, Java, and others can be generated from it. Rune effectively makes BadgerDB's large-value storage available to any language runtime, not just Go.
 
-**Elevator pitch:** A shared cache built for large files — stream blobs of any size across pods the way Redis streams strings.
+**Elevator pitch:** A shared cache built for large files — stream blobs across pods the way Redis streams strings, optimized for the large-value workloads where Redis falls apart.
 
 ## Architecture
 
@@ -202,21 +202,9 @@ Single statically-linked Go binary. Config via env vars. Single-node mode requir
 
 ## Security
 
-### Node-to-Node (always on in cluster mode)
-Inter-node gRPC traffic uses **mTLS with a cluster CA**. Each node is provisioned a certificate signed by a shared cluster CA; peers verify against it before accepting connections. This is the standard used by etcd and CockroachDB. In Kubernetes, cert-manager handles certificate provisioning and rotation automatically via the Helm chart.
+Rune runs plaintext gRPC. In-transit encryption and mutual authentication are delegated to the service mesh (Istio, Linkerd, or similar). Rune is designed for deployment on an internal Kubernetes network where pods connect over a trusted in-cluster network — network policy is the recommended mechanism for restricting which pods can reach Rune.
 
-### Client-to-Node
-**TLS is always on.** Auth strategy depends on deployment:
-
-- **Kubernetes:** Delegate auth to the service mesh (Istio/Linkerd). The sidecar handles mTLS transparently — no auth code in Rune, no cert management burden on the caller. This is the recommended production path.
-- **Standalone binary:** Optional bearer token via config. If `auth-token` is set, Rune validates it on every inbound gRPC request via metadata. Disabled by default.
-
-```
-# optional, standalone deployments only
-RUNE_AUTH_TOKEN=your-secret-token
-```
-
-TLS 1.2 minimum, TLS 1.3 preferred. `grpc.WithInsecure()` is never used in production builds.
+No TLS or auth configuration exists in Rune itself. There is no bearer token, no cert management, and no `grpc.WithInsecure()` guard — the assumption is that the surrounding infrastructure handles network-level security.
 
 ## Observability
 
@@ -224,13 +212,9 @@ TLS 1.2 minimum, TLS 1.3 preferred. `grpc.WithInsecure()` is never used in produ
 JSON logs via `log/slog`: the standard `time`/`level`/`msg` plus structured attributes. Request access logs carry `method`, `duration_ms`, and `key`/`peer` where relevant (`code` only on failure). Membership and lifecycle events log at `info`; per-request access logs are at `debug`. Node identity is left to the collector's pod/node labels rather than embedded per line. Compatible with Loki, Datadog, CloudWatch, and any aggregator without custom parsing. Log level configurable via `RUNE_LOG_LEVEL` (default `info`).
 
 ### Health Checks
-Two gRPC health RPCs used by Kubernetes probes:
-- `Liveness` — is the process alive?
-- `Readiness` — is this node ready to serve? (BadgerDB open, etcd connected)
-
-```
-RUNE_LOG_LEVEL=info
-```
+Two gRPC health services registered via the standard gRPC health protocol, used by Kubernetes probes:
+- `""` (empty string) — Liveness: process is alive, always SERVING
+- `"rune"` — Readiness: NOT_SERVING until the listener is up, SERVING once started, NOT_SERVING again when Stop is called before draining begins
 
 ## What Rune Is Not
 
