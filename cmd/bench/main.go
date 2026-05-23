@@ -1,10 +1,3 @@
-// Command bench measures Rune ClusterClient Set/Get throughput and latency
-// across a range of blob sizes. Run it against a live cluster and paste the
-// output table into the README.
-//
-// Usage:
-//
-//	bench -etcd localhost:2379
 package main
 
 import (
