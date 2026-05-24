@@ -10,7 +10,9 @@
 # are not resolvable from the host).
 
 x-rune: &rune
-  build: .
+  build:
+    context: ..
+    dockerfile: Dockerfile
   restart: unless-stopped
   depends_on:
     etcd:

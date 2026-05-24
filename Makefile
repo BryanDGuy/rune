@@ -23,10 +23,10 @@ update-deps:
 	go mod tidy
 
 test:
-	go test -race $(shell go list ./... | grep -v /test/integration)
+	go test -race $(shell go list ./... | grep -v /rune/test/integration)
 
 test-integration:
-	go test -race ./test/integration/...
+	go test -race ./rune/test/integration/...
 
 verify: lint fmt-check vet modernize
 
@@ -50,10 +50,10 @@ modernize-fix:
 
 # Local 3-node cluster + etcd via docker-compose (nodes on host ports 7946/7947/7948).
 cluster-up:
-	docker compose up --build -d
+	docker compose -f rune/docker-compose.yml up --build -d
 
 cluster-down:
-	docker compose down
+	docker compose -f rune/docker-compose.yml down
 
 # Run the benchmark inside the compose network so ClusterClient can resolve node addresses.
 # Requires the cluster to be running: make cluster-up
