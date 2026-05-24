@@ -56,7 +56,7 @@ func run() error {
 	}
 	defer etcdClient.Close()
 
-	client, err := runesdk.NewClusterClient(etcdClient, "")
+	client, err := runesdk.NewClusterClient(etcdClient)
 	if err != nil {
 		return fmt.Errorf("cluster client: %w", err)
 	}

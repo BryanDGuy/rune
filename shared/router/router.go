@@ -8,13 +8,17 @@ import (
 	"github.com/cespare/xxhash/v2"
 )
 
+// NodeKeyPrefix is the etcd key prefix under which nodes register themselves.
+const NodeKeyPrefix = "/rune/nodes/"
+
 var ErrNoNodes = errors.New("router: no nodes in ring")
 
 // Node is a ring member. ID is used for placement; Addr is used for dialing.
 // Keeping them separate means address changes don't shift ring position.
+// The JSON tags define the etcd wire format; both server and SDK must agree on them.
 type Node struct {
-	ID   string
-	Addr string
+	ID   string `json:"id"`
+	Addr string `json:"addr"`
 }
 
 func (n Node) String() string { return n.ID }

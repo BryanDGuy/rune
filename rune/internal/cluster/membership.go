@@ -8,23 +8,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bryandguy/rune/shared/logging"
+	"github.com/bryandguy/rune/rune/internal/logging"
 	"github.com/bryandguy/rune/shared/router"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 const (
-	nodePrefix        = "/rune/nodes/"
 	leaseTTLSeconds   = 10
 	reregisterBackoff = time.Second
 )
-
-// NodeInfo is the value stored in etcd for each registered node.
-type NodeInfo struct {
-	ID   string `json:"id"`
-	Addr string `json:"addr"`
-}
 
 // memberStore is the subset of clientv3.Client methods used by Membership.
 // *clientv3.Client satisfies this interface; tests use a fake.
@@ -46,7 +39,7 @@ type MembershipIface interface {
 
 // Membership watches etcd for node join/leave events and keeps a router.Router current.
 // If nodeAddr is non-empty, it also registers this node in etcd (server mode).
-// If nodeAddr is empty, it only watches (SDK / client mode).
+// If nodeAddr is empty, it only watches (client mode).
 type Membership struct {
 	store    memberStore
 	ring     *router.Router
@@ -110,11 +103,11 @@ func (m *Membership) grantAndPut(ctx context.Context) error {
 	}
 	m.leaseID = resp.ID
 
-	val, err := json.Marshal(NodeInfo{ID: m.nodeID, Addr: m.nodeAddr})
+	val, err := json.Marshal(router.Node{ID: m.nodeID, Addr: m.nodeAddr})
 	if err != nil {
 		return err
 	}
-	_, err = m.store.Put(ctx, nodePrefix+m.nodeID, string(val), clientv3.WithLease(m.leaseID))
+	_, err = m.store.Put(ctx, router.NodeKeyPrefix+m.nodeID, string(val), clientv3.WithLease(m.leaseID))
 	return err
 }
 
@@ -154,7 +147,7 @@ func (m *Membership) reregister(ctx context.Context) {
 }
 
 func (m *Membership) populate(ctx context.Context) error {
-	resp, err := m.store.Get(ctx, nodePrefix, clientv3.WithPrefix())
+	resp, err := m.store.Get(ctx, router.NodeKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return err
 	}
@@ -166,7 +159,7 @@ func (m *Membership) populate(ctx context.Context) error {
 
 func (m *Membership) watchLoop(ctx context.Context) {
 	for {
-		wch := m.store.Watch(ctx, nodePrefix, clientv3.WithPrefix())
+		wch := m.store.Watch(ctx, router.NodeKeyPrefix, clientv3.WithPrefix())
 		for wresp := range wch {
 			for _, ev := range wresp.Events {
 				switch ev.Type {
@@ -175,7 +168,7 @@ func (m *Membership) watchLoop(ctx context.Context) {
 						m.logger.Info("peer joined", "peer_id", id)
 					}
 				case mvccpb.DELETE:
-					nodeID := strings.TrimPrefix(string(ev.Kv.Key), nodePrefix)
+					nodeID := strings.TrimPrefix(string(ev.Kv.Key), router.NodeKeyPrefix)
 					m.ring.Remove(nodeID)
 					if nodeID != m.nodeID {
 						m.logger.Info("peer left", "peer_id", nodeID)
@@ -198,12 +191,12 @@ func (m *Membership) watchLoop(ctx context.Context) {
 }
 
 func (m *Membership) applyPut(val []byte) (nodeID string, ok bool) {
-	var info NodeInfo
-	if err := json.Unmarshal(val, &info); err != nil {
+	var node router.Node
+	if err := json.Unmarshal(val, &node); err != nil {
 		return "", false
 	}
-	m.ring.Add(router.Node{ID: info.ID, Addr: info.Addr})
-	return info.ID, true
+	m.ring.Add(node)
+	return node.ID, true
 }
 
 // Ring returns the current consistent hash ring. Safe for concurrent use.

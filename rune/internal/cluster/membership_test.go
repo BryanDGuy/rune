@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bryandguy/rune/shared/router"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -130,7 +131,7 @@ func (f *fakeStore) simulateLeaseLoss() {
 }
 
 func (f *fakeStore) simulateNodeLeave(nodeID string) {
-	key := nodePrefix + nodeID
+	key := router.NodeKeyPrefix + nodeID
 	f.mu.Lock()
 	delete(f.kvs, key)
 	f.mu.Unlock()
@@ -156,10 +157,10 @@ func TestMembershipRegistersOnStart(t *testing.T) {
 func TestMembershipWatchOnlyMode(t *testing.T) {
 	store := newFakeStore()
 	// Pre-populate store with one node.
-	info, _ := json.Marshal(NodeInfo{ID: "node-2", Addr: "host2:7946"})
-	store.kvs[nodePrefix+"node-2"] = string(info)
+	info, _ := json.Marshal(router.Node{ID: "node-2", Addr: "host2:7946"})
+	store.kvs[router.NodeKeyPrefix+"node-2"] = string(info)
 
-	// nodeAddr="" means watch-only (SDK mode).
+	// nodeAddr="" means watch-only (client mode).
 	m := New(store, "", "", nil)
 	ctx := t.Context()
 
@@ -183,10 +184,10 @@ func TestMembershipRingUpdatesOnNodeJoin(t *testing.T) {
 	defer m.Stop()
 
 	// Simulate node-2 joining.
-	info, _ := json.Marshal(NodeInfo{ID: "node-2", Addr: "host2:7946"})
+	info, _ := json.Marshal(router.Node{ID: "node-2", Addr: "host2:7946"})
 	store.watchC <- clientv3.WatchResponse{Events: []*clientv3.Event{{
 		Type: clientv3.EventTypePut,
-		Kv:   &mvccpb.KeyValue{Key: []byte(nodePrefix + "node-2"), Value: info},
+		Kv:   &mvccpb.KeyValue{Key: []byte(router.NodeKeyPrefix + "node-2"), Value: info},
 	}}}
 
 	assert.Eventually(t, func() bool {
@@ -196,8 +197,8 @@ func TestMembershipRingUpdatesOnNodeJoin(t *testing.T) {
 
 func TestMembershipRingUpdatesOnNodeLeave(t *testing.T) {
 	store := newFakeStore()
-	info, _ := json.Marshal(NodeInfo{ID: "node-2", Addr: "host2:7946"})
-	store.kvs[nodePrefix+"node-2"] = string(info)
+	info, _ := json.Marshal(router.Node{ID: "node-2", Addr: "host2:7946"})
+	store.kvs[router.NodeKeyPrefix+"node-2"] = string(info)
 
 	m := New(store, "node-1", "host1:7946", nil)
 	ctx := t.Context()

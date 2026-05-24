@@ -50,10 +50,10 @@ linters:
         no-direct-logging:
           files:
             - "**/*.go"
-            - "!**/shared/logging/*.go"
+            - "!**/rune/internal/logging/*.go"
           deny:
             - pkg: log
-              desc: log through shared/logging.Logger, not log or slog directly
+              desc: log through rune/internal/logging.Logger, not log or slog directly
     govet:
       enable-all: true
     misspell:

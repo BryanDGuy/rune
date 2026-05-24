@@ -1,7 +1,7 @@
 package testutil
 
 import (
-	"github.com/bryandguy/rune/shared/cluster"
+	"github.com/bryandguy/rune/rune/internal/cluster"
 	"github.com/bryandguy/rune/shared/router"
 )
 

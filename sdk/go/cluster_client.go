@@ -7,7 +7,6 @@ import (
 	"io"
 	"sync"
 
-	"github.com/bryandguy/rune/shared/cluster"
 	"github.com/bryandguy/rune/shared/router"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
@@ -21,12 +20,12 @@ var (
 
 // ClusterClient routes Get/Set to the correct Rune node using a local ring copy.
 type ClusterClient struct {
-	membership cluster.MembershipIface
-	ring       *router.Router
-	clients    map[string]*Client
-	dialFn     func(addr string) (*Client, error) // nil in static-ring (test) mode
-	mu         sync.RWMutex
-	closed     bool
+	disc    *discovery
+	ring    *router.Router
+	clients map[string]*Client
+	dialFn  func(addr string) (*Client, error) // nil in static-ring (test) mode
+	mu      sync.RWMutex
+	closed  bool
 }
 
 func defaultDial(addr string) (*Client, error) {
@@ -38,17 +37,16 @@ func defaultDial(addr string) (*Client, error) {
 }
 
 // NewClusterClient creates a ClusterClient backed by a live etcd watch.
-// Pass nodeID="" for pure clients (no self-registration).
-func NewClusterClient(etcdClient *clientv3.Client, nodeID string) (*ClusterClient, error) {
-	m := cluster.New(etcdClient, nodeID, "", nil)
-	if err := m.Start(context.Background()); err != nil {
-		return nil, fmt.Errorf("start membership: %w", err)
+func NewClusterClient(etcdClient *clientv3.Client) (*ClusterClient, error) {
+	d := newDiscovery(etcdClient)
+	if err := d.start(context.Background()); err != nil {
+		return nil, fmt.Errorf("start discovery: %w", err)
 	}
 	return &ClusterClient{
-		membership: m,
-		ring:       m.Ring(),
-		clients:    make(map[string]*Client),
-		dialFn:     defaultDial,
+		disc:    d,
+		ring:    d.ring,
+		clients: make(map[string]*Client),
+		dialFn:  defaultDial,
 	}, nil
 }
 
@@ -147,8 +145,8 @@ func (c *ClusterClient) Close() error {
 		return nil
 	}
 	c.closed = true
-	if c.membership != nil {
-		c.membership.Stop()
+	if c.disc != nil {
+		c.disc.stop()
 	}
 	for _, client := range c.clients {
 		_ = client.Close()

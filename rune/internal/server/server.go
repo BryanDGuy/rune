@@ -6,11 +6,11 @@ import (
 	"net"
 	"sync/atomic"
 
+	"github.com/bryandguy/rune/rune/internal/cluster"
 	"github.com/bryandguy/rune/rune/internal/config"
+	"github.com/bryandguy/rune/rune/internal/logging"
 	"github.com/bryandguy/rune/rune/internal/storage"
-	"github.com/bryandguy/rune/shared/cluster"
 	runev1 "github.com/bryandguy/rune/shared/gen/rune/v1"
-	"github.com/bryandguy/rune/shared/logging"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"

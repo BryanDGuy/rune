@@ -6,6 +6,7 @@ require (
 	github.com/bryandguy/rune/rune v0.0.0-00010101000000-000000000000
 	github.com/bryandguy/rune/shared v0.0.0
 	github.com/stretchr/testify v1.11.1
+	go.etcd.io/etcd/api/v3 v3.5.21
 	go.etcd.io/etcd/client/v3 v3.5.21
 	google.golang.org/grpc v1.81.1
 )
@@ -27,7 +28,6 @@ require (
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	go.etcd.io/etcd/api/v3 v3.5.21 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.5.21 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
