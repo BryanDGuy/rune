@@ -5,14 +5,14 @@
 
 ## Goal
 
-Restructure the repo into a monorepo with clear ownership boundaries: `rune/` for the server binary, `sdk/` for client SDKs, and `shared/` for code consumed by both. A single `go.mod` at the root keeps versioning coupled.
+Restructure the repo into a monorepo with clear ownership boundaries: `rune/` for the server binary, `sdk/` for client SDKs, and `shared/` for code consumed by both. Each component has its own `go.mod` so they can be versioned and tagged independently; a root `go.work` stitches them together for local development.
 
 ## Directory Layout
 
 ```
 rune/                        ← repo root
-├── go.mod                   (module: github.com/bryandguy/rune)
-├── go.sum
+├── go.work                  (workspace: uses rune/, sdk/go/, shared/)
+├── go.work.sum
 ├── Makefile
 ├── LICENSE
 ├── README.md
@@ -20,7 +20,9 @@ rune/                        ← repo root
 ├── docs/
 ├── .github/
 │
-├── rune/                    ← server binary
+├── rune/                    ← server binary (module: github.com/bryandguy/rune/rune)
+│   ├── go.mod
+│   ├── go.sum
 │   ├── cmd/
 │   │   ├── rune/
 │   │   ├── runectl/
@@ -36,9 +38,13 @@ rune/                        ← repo root
 │   └── docker-compose.yml
 │
 ├── sdk/
-│   └── go/
+│   └── go/                  (module: github.com/bryandguy/rune/sdk/go)
+│       ├── go.mod
+│       └── go.sum
 │
-└── shared/
+└── shared/                  (module: github.com/bryandguy/rune/shared)
+    ├── go.mod
+    ├── go.sum
     ├── cluster/             ← moved from internal/cluster (imported by SDK)
     ├── gen/rune/v1/         ← generated proto types (imported by SDK + server)
     ├── logging/             ← moved from internal/logging (imported by cluster)
@@ -67,6 +73,8 @@ All files importing the packages below must be updated.
 | `github.com/bryandguy/rune/gen/rune/v1` | `github.com/bryandguy/rune/shared/gen/rune/v1` |
 | `github.com/bryandguy/rune/test/testutil` | `github.com/bryandguy/rune/rune/test/testutil` |
 
+With multi-module, cross-component imports require `replace` directives in each `go.mod` pointing to the local path (e.g. `replace github.com/bryandguy/rune/shared => ../../shared`). The `go.work` workspace handles resolution automatically for `go build` and `go test` run from the repo root, but `go mod tidy -C <dir>` requires the replace directives to be present.
+
 The `sdk/go` package path (`github.com/bryandguy/rune/sdk/go`) is unchanged.
 
 ## Makefile Changes
@@ -76,16 +84,24 @@ The `sdk/go` package path (`github.com/bryandguy/rune/sdk/go`) is unchanged.
 | `build` | `./cmd/rune` → `./rune/cmd/rune` |
 | `bench` | `./cmd/bench/` → `./rune/cmd/bench/` |
 | `proto` | `--go_out=gen --proto_path=proto` → `--go_out=shared/gen --proto_path=shared/proto` |
-| `test` | `grep -v /test/integration` → `grep -v /rune/test/integration` |
-| `test-integration` | `./test/integration/...` → `./rune/test/integration/...` |
+| `test` | now an alias for `test-rune test-sdk test-shared` |
+| `test-rune` | server tests, excluding integration |
+| `test-sdk` | `./sdk/go/...` |
+| `test-shared` | `./shared/...` |
+| `test-integration` | `./rune/test/integration/...` |
+| `verify` | alias for `verify-rune verify-sdk verify-shared` |
+| `verify-{module}` | runs `lint fmt-check vet modernize` for that module |
+| `lint/fmt/vet/modernize` | each has `-rune`, `-sdk`, `-shared` variants scoped to their directory |
+| `tidy` | runs `go mod tidy -C` for each module then `go work sync` |
+| `update-deps` | `cd <dir> && go get -u ./...` per module, then tidy + work sync |
 
 ## Release Pipeline
 
 The full publish chain, unchanged by the restructure except where noted:
 
 1. **`release.yml`** — runs `semantic-release` on every push to `main`. Reads conventional commits, creates a `v*` tag, and opens a GitHub Release with generated release notes.
-2. **`publish.yml`** — triggers on `v*` tags. Currently has one job (`docker`); a second job (`binaries`) must be added (see below).
-3. **Go SDK** — no separate publish step needed. The Go module proxy indexes the `v*` tag automatically; SDK consumers run `go get github.com/bryandguy/rune/sdk/go@vX.Y.Z`.
+2. **`publish.yml`** — triggers on `v*` tags. Has two jobs: `docker` (existing) and `binaries` (new, see below).
+3. **Go SDK** — no separate publish step needed today because versioning is still coupled to the single `v*` tag. When independent per-module tags are added (e.g. `sdk/go/v1.2.3`), `semantic-release` will need to be configured per-module with path-prefixed tags; the Go module proxy will then index each independently and consumers will run `go get github.com/bryandguy/rune/sdk/go@vX.Y.Z`.
 
 ### Docker job (existing, path update required)
 
@@ -101,7 +117,6 @@ A second job in `publish.yml` cross-compiles the `rune` binary and uploads the a
 
 ## What Does Not Change
 
-- `go.mod` module path remains `github.com/bryandguy/rune`
 - `sdk/go` import paths are unchanged
-- Versioning stays coupled: a single `v*` tag covers both server and SDK
+- Versioning is currently still coupled: a single `v*` tag covers all modules (independent per-module tagging is future work)
 - `.github/` workflows stay at root (required by GitHub)
