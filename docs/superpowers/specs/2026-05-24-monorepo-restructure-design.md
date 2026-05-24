@@ -64,9 +64,25 @@ The `sdk/go` package path (`github.com/bryandguy/rune/sdk/go`) is unchanged.
 | `test` | exclusion pattern updated to reflect new paths |
 | `test-integration` | `./test/integration/...` → `./rune/test/integration/...` |
 
-## CI Changes
+## Release Pipeline
 
-`publish.yml` Docker build context changes from `.` to `rune/` since `Dockerfile` moves into `rune/`. The `docker/build-push-action` `context` and `file` fields must be updated accordingly.
+The full publish chain, unchanged by the restructure except where noted:
+
+1. **`release.yml`** — runs `semantic-release` on every push to `main`. Reads conventional commits, creates a `v*` tag, and opens a GitHub Release with generated release notes.
+2. **`publish.yml`** — triggers on `v*` tags. Currently has one job (`docker`); a second job (`binaries`) must be added (see below).
+3. **Go SDK** — no separate publish step needed. The Go module proxy indexes the `v*` tag automatically; SDK consumers run `go get github.com/bryandguy/rune/sdk/go@vX.Y.Z`.
+
+### Docker job (existing, path update required)
+
+`publish.yml` Docker build context changes from `.` to `rune/` since `Dockerfile` moves into `rune/`. The `docker/build-push-action` `context` field must be updated accordingly.
+
+### Binaries job (new)
+
+A second job in `publish.yml` cross-compiles the `rune` binary and uploads the artifacts to the GitHub Release created by `release.yml`.
+
+- **Targets:** `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`
+- **Build:** `CGO_ENABLED=0 GOOS=$OS GOARCH=$ARCH go build -trimpath -ldflags="-s -w" -o rune ./rune/cmd/rune`
+- **Upload:** `softprops/action-gh-release` to attach binaries to the existing release for the triggering tag
 
 ## What Does Not Change
 
