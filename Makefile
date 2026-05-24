@@ -4,7 +4,7 @@ BINARY       := bin/rune
 BENCH_BINARY := bin/bench
 
 build:
-	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BINARY) ./cmd/rune
+	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BINARY) ./rune/cmd/rune
 
 proto:
 	protoc \
@@ -58,7 +58,7 @@ cluster-down:
 # Run the benchmark inside the compose network so ClusterClient can resolve node addresses.
 # Requires the cluster to be running: make cluster-up
 bench:
-	go build -o $(BENCH_BINARY) ./cmd/bench/
+	go build -o $(BENCH_BINARY) ./rune/cmd/bench/
 	docker run --rm \
 		--network rune_default \
 		-v $(PWD)/$(BENCH_BINARY):/bench \

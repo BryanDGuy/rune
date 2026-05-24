@@ -5,7 +5,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/bryandguy/rune/internal/storage"
+	"github.com/bryandguy/rune/rune/internal/storage"
 	runev1 "github.com/bryandguy/rune/shared/gen/rune/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

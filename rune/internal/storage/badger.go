@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/bryandguy/rune/internal/config"
+	"github.com/bryandguy/rune/rune/internal/config"
 	badger "github.com/dgraph-io/badger/v4"
 )
 

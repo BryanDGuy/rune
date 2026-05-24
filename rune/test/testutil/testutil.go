@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bryandguy/rune/internal/config"
-	"github.com/bryandguy/rune/internal/server"
-	"github.com/bryandguy/rune/internal/storage"
+	"github.com/bryandguy/rune/rune/internal/config"
+	"github.com/bryandguy/rune/rune/internal/server"
+	"github.com/bryandguy/rune/rune/internal/storage"
 	"github.com/bryandguy/rune/shared/cluster"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"

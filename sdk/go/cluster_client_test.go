@@ -8,8 +8,8 @@ import (
 
 	runesdk "github.com/bryandguy/rune/sdk/go"
 
+	"github.com/bryandguy/rune/rune/test/testutil"
 	"github.com/bryandguy/rune/shared/router"
-	"github.com/bryandguy/rune/test/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
