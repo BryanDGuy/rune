@@ -28,7 +28,9 @@ rune/                        ← repo root
 │   │   ├── runectl/
 │   │   └── bench/
 │   ├── internal/
+│   │   ├── cluster/         ← server membership + peer dialer (etcd registration, keepalive)
 │   │   ├── config/
+│   │   ├── logging/         ← server logging surface
 │   │   ├── server/
 │   │   └── storage/
 │   ├── test/
@@ -40,23 +42,26 @@ rune/                        ← repo root
 ├── sdk/
 │   └── go/                  (module: github.com/bryandguy/rune/sdk/go)
 │       ├── go.mod
-│       └── go.sum
+│       ├── go.sum
+│       └── discovery.go     ← minimal etcd watcher (no registration, no logging)
 │
 └── shared/                  (module: github.com/bryandguy/rune/shared)
     ├── go.mod
     ├── go.sum
-    ├── cluster/             ← moved from internal/cluster (imported by SDK)
-    ├── gen/rune/v1/         ← generated proto types (imported by SDK + server)
-    ├── logging/             ← moved from internal/logging (imported by cluster)
+    ├── gen/rune/v1/         ← generated proto types
     ├── proto/rune/v1/       ← .proto source definitions
-    └── router/              ← moved from internal/router (imported by SDK)
+    └── router/              ← consistent hash ring; Node type is the etcd wire format
 ```
 
 `bin/` (build output) stays at root and is not moved.
 
-**Why cluster, router, and logging land in shared/:** Go's `internal/` visibility rule restricts imports to the subtree rooted at the parent of the `internal/` directory. Moving `internal/` to `rune/internal/` would prevent the SDK (at `sdk/go/`) from importing those packages. The SDK already imports `cluster` and `router` for client-side consistent-hash routing — the restructure surfaces that these were never truly server-internal. `logging` moves with `cluster` because `cluster` depends on it and it has no server-specific dependencies.
+**What belongs in shared/:** Only protocol-level code that both the server and SDK must agree on — the gRPC types (proto) and the consistent hash ring algorithm with its `Node` type. `router.Node` doubles as the etcd wire format (via JSON tags), so there is no separate `NodeInfo` struct.
 
-`testutil` moves to `rune/test/testutil/` rather than `shared/` because it imports server internals (`config`, `server`, `storage`). Being outside any `internal/` directory, SDK tests can still import it at its new path.
+**What belongs in rune/internal/:** Server implementation details — node registration, lease keepalive, peer dialing, logging. None of this is relevant to SDK consumers.
+
+**SDK discovery vs server cluster:** The server's `cluster.Membership` registers nodes in etcd and maintains lease keepalive. The SDK only needs to watch `/rune/nodes/` and populate a ring — `discovery.go` does exactly that in ~80 lines with no server dependencies and no logging.
+
+`testutil` lives at `rune/test/testutil/` because it imports server internals (`config`, `server`, `storage`). Being outside any `internal/` directory, SDK tests can still import it.
 
 ## Import Path Changes
 
@@ -64,9 +69,9 @@ All files importing the packages below must be updated.
 
 | Before | After |
 |--------|-------|
-| `github.com/bryandguy/rune/internal/cluster` | `github.com/bryandguy/rune/shared/cluster` |
+| `github.com/bryandguy/rune/internal/cluster` | `github.com/bryandguy/rune/rune/internal/cluster` |
 | `github.com/bryandguy/rune/internal/router` | `github.com/bryandguy/rune/shared/router` |
-| `github.com/bryandguy/rune/internal/logging` | `github.com/bryandguy/rune/shared/logging` |
+| `github.com/bryandguy/rune/internal/logging` | `github.com/bryandguy/rune/rune/internal/logging` |
 | `github.com/bryandguy/rune/internal/config` | `github.com/bryandguy/rune/rune/internal/config` |
 | `github.com/bryandguy/rune/internal/server` | `github.com/bryandguy/rune/rune/internal/server` |
 | `github.com/bryandguy/rune/internal/storage` | `github.com/bryandguy/rune/rune/internal/storage` |
