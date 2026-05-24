@@ -41,6 +41,8 @@ jobs:
         with:
           go-version-file: go.work
       - uses: golangci/golangci-lint-action@v8
+        with:
+          args: ./rune/... ./sdk/go/... ./shared/...
 
   test:
     runs-on: ubuntu-latest
