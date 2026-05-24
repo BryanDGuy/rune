@@ -80,8 +80,8 @@ The full publish chain, unchanged by the restructure except where noted:
 
 A second job in `publish.yml` cross-compiles the `rune` binary and uploads the artifacts to the GitHub Release created by `release.yml`.
 
-- **Targets:** `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`
-- **Build:** `CGO_ENABLED=0 GOOS=$OS GOARCH=$ARCH go build -trimpath -ldflags="-s -w" -o rune ./rune/cmd/rune`
+- **Targets:** `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64` via a matrix strategy
+- **Build:** `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o rune ./rune/cmd/rune` with `GOOS` and `GOARCH` set from the matrix
 - **Upload:** `softprops/action-gh-release` to attach binaries to the existing release for the triggering tag
 
 ## What Does Not Change
