@@ -26,8 +26,12 @@ rune/                        ← repo root
 │   │   ├── runectl/
 │   │   └── bench/
 │   ├── internal/
+│   │   ├── config/
+│   │   ├── server/
+│   │   └── storage/
 │   ├── test/
-│   │   └── integration/
+│   │   ├── integration/
+│   │   └── testutil/
 │   ├── Dockerfile
 │   └── docker-compose.yml
 │
@@ -35,22 +39,33 @@ rune/                        ← repo root
 │   └── go/
 │
 └── shared/
-    ├── gen/rune/v1/         ← generated proto types
+    ├── cluster/             ← moved from internal/cluster (imported by SDK)
+    ├── gen/rune/v1/         ← generated proto types (imported by SDK + server)
+    ├── logging/             ← moved from internal/logging (imported by cluster)
     ├── proto/rune/v1/       ← .proto source definitions
-    └── testutil/            ← test helpers
+    └── router/              ← moved from internal/router (imported by SDK)
 ```
 
 `bin/` (build output) stays at root and is not moved.
 
+**Why cluster, router, and logging land in shared/:** Go's `internal/` visibility rule restricts imports to the subtree rooted at the parent of the `internal/` directory. Moving `internal/` to `rune/internal/` would prevent the SDK (at `sdk/go/`) from importing those packages. The SDK already imports `cluster` and `router` for client-side consistent-hash routing — the restructure surfaces that these were never truly server-internal. `logging` moves with `cluster` because `cluster` depends on it and it has no server-specific dependencies.
+
+`testutil` moves to `rune/test/testutil/` rather than `shared/` because it imports server internals (`config`, `server`, `storage`). Being outside any `internal/` directory, SDK tests can still import it at its new path.
+
 ## Import Path Changes
 
-Three package paths change. All files importing them must be updated.
+All files importing the packages below must be updated.
 
 | Before | After |
 |--------|-------|
-| `github.com/bryandguy/rune/internal/...` | `github.com/bryandguy/rune/rune/internal/...` |
+| `github.com/bryandguy/rune/internal/cluster` | `github.com/bryandguy/rune/shared/cluster` |
+| `github.com/bryandguy/rune/internal/router` | `github.com/bryandguy/rune/shared/router` |
+| `github.com/bryandguy/rune/internal/logging` | `github.com/bryandguy/rune/shared/logging` |
+| `github.com/bryandguy/rune/internal/config` | `github.com/bryandguy/rune/rune/internal/config` |
+| `github.com/bryandguy/rune/internal/server` | `github.com/bryandguy/rune/rune/internal/server` |
+| `github.com/bryandguy/rune/internal/storage` | `github.com/bryandguy/rune/rune/internal/storage` |
 | `github.com/bryandguy/rune/gen/rune/v1` | `github.com/bryandguy/rune/shared/gen/rune/v1` |
-| `github.com/bryandguy/rune/test/testutil` | `github.com/bryandguy/rune/shared/testutil` |
+| `github.com/bryandguy/rune/test/testutil` | `github.com/bryandguy/rune/rune/test/testutil` |
 
 The `sdk/go` package path (`github.com/bryandguy/rune/sdk/go`) is unchanged.
 
@@ -61,7 +76,7 @@ The `sdk/go` package path (`github.com/bryandguy/rune/sdk/go`) is unchanged.
 | `build` | `./cmd/rune` → `./rune/cmd/rune` |
 | `bench` | `./cmd/bench/` → `./rune/cmd/bench/` |
 | `proto` | `--go_out=gen --proto_path=proto` → `--go_out=shared/gen --proto_path=shared/proto` |
-| `test` | exclusion pattern updated to reflect new paths |
+| `test` | `grep -v /test/integration` → `grep -v /rune/test/integration` |
 | `test-integration` | `./test/integration/...` → `./rune/test/integration/...` |
 
 ## Release Pipeline
@@ -74,7 +89,7 @@ The full publish chain, unchanged by the restructure except where noted:
 
 ### Docker job (existing, path update required)
 
-`publish.yml` Docker build context changes from `.` to `rune/` since `Dockerfile` moves into `rune/`. The `docker/build-push-action` `context` field must be updated accordingly.
+`Dockerfile` moves into `rune/` but `go.mod` stays at the repo root, so the build context must remain `.` (repo root). Set `file: rune/Dockerfile` in `docker/build-push-action` to point at the moved Dockerfile while keeping the full source tree accessible. `docker-compose.yml` (also moving to `rune/`) uses `build: { context: .., dockerfile: Dockerfile }` for the same reason.
 
 ### Binaries job (new)
 
