@@ -26,11 +26,19 @@ proto:
 		rune/v1/rune.proto
 
 tidy:
-	go mod tidy
+	go mod tidy -C shared
+	go mod tidy -C rune
+	go mod tidy -C sdk/go
+	go work sync
 
 update-deps:
-	go get -u ./...
-	go mod tidy
+	cd shared && go get -u ./...
+	cd rune && go get -u ./...
+	cd sdk/go && go get -u ./...
+	go mod tidy -C shared
+	go mod tidy -C rune
+	go mod tidy -C sdk/go
+	go work sync
 
 test: test-rune test-sdk test-shared
 
@@ -38,7 +46,7 @@ test-rune:
 	go test -race $(shell go list ./rune/... | grep -v /rune/test/integration)
 
 test-sdk:
-	go test -race ./sdk/...
+	go test -race ./sdk/go/...
 
 test-shared:
 	go test -race ./shared/...
@@ -60,7 +68,7 @@ lint-rune:
 	@golangci-lint run ./rune/...
 
 lint-sdk:
-	@golangci-lint run ./sdk/...
+	@golangci-lint run ./sdk/go/...
 
 lint-shared:
 	@golangci-lint run ./shared/...
@@ -71,7 +79,7 @@ fmt-rune:
 	@gofmt -l -w ./rune
 
 fmt-sdk:
-	@gofmt -l -w ./sdk
+	@gofmt -l -w ./sdk/go
 
 fmt-shared:
 	@gofmt -l -w ./shared
@@ -82,7 +90,7 @@ fmt-check-rune:
 	@test -z "$$(gofmt -l ./rune)"
 
 fmt-check-sdk:
-	@test -z "$$(gofmt -l ./sdk)"
+	@test -z "$$(gofmt -l ./sdk/go)"
 
 fmt-check-shared:
 	@test -z "$$(gofmt -l ./shared)"
@@ -93,7 +101,7 @@ vet-rune:
 	@go vet ./rune/...
 
 vet-sdk:
-	@go vet ./sdk/...
+	@go vet ./sdk/go/...
 
 vet-shared:
 	@go vet ./shared/...
@@ -104,7 +112,7 @@ modernize-rune:
 	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest ./rune/...
 
 modernize-sdk:
-	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest ./sdk/...
+	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest ./sdk/go/...
 
 modernize-shared:
 	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest $(shell go list ./shared/... | grep -v /shared/gen/)
@@ -115,7 +123,7 @@ modernize-fix-rune:
 	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix ./rune/...
 
 modernize-fix-sdk:
-	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix ./sdk/...
+	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix ./sdk/go/...
 
 modernize-fix-shared:
 	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix $(shell go list ./shared/... | grep -v /shared/gen/)
