@@ -1,4 +1,14 @@
-.PHONY: build proto tidy update-deps test test-integration verify lint fmt fmt-check vet modernize modernize-fix cluster-up cluster-down bench
+.PHONY: build proto tidy update-deps \
+        test test-rune test-sdk test-shared \
+        test-integration \
+        verify verify-rune verify-sdk verify-shared \
+        lint lint-rune lint-sdk lint-shared \
+        fmt fmt-rune fmt-sdk fmt-shared \
+        fmt-check fmt-check-rune fmt-check-sdk fmt-check-shared \
+        vet vet-rune vet-sdk vet-shared \
+        modernize modernize-rune modernize-sdk modernize-shared \
+        modernize-fix modernize-fix-rune modernize-fix-sdk modernize-fix-shared \
+        cluster-up cluster-down bench
 
 BINARY       := bin/rune
 BENCH_BINARY := bin/bench
@@ -22,31 +32,93 @@ update-deps:
 	go get -u ./...
 	go mod tidy
 
-test:
-	go test -race $(shell go list ./... | grep -v /rune/test/integration)
+test: test-rune test-sdk test-shared
+
+test-rune:
+	go test -race $(shell go list ./rune/... | grep -v /rune/test/integration)
+
+test-sdk:
+	go test -race ./sdk/...
+
+test-shared:
+	go test -race $(shell go list ./shared/... | grep -v /shared/gen/)
 
 test-integration:
 	go test -race ./rune/test/integration/...
 
-verify: lint fmt-check vet modernize
+verify: verify-rune verify-sdk verify-shared
 
-lint:
-	@golangci-lint run ./...
+verify-rune: lint-rune fmt-check-rune vet-rune modernize-rune
 
-fmt:
-	@gofmt -l -w .
+verify-sdk: lint-sdk fmt-check-sdk vet-sdk modernize-sdk
 
-fmt-check:
-	@test -z "$$(gofmt -l .)"
+verify-shared: lint-shared fmt-check-shared vet-shared modernize-shared
 
-vet:
-	@go vet ./...
+lint: lint-rune lint-sdk lint-shared
 
-modernize:
-	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest $(shell go list ./... | grep -v /shared/gen/)
+lint-rune:
+	@golangci-lint run ./rune/...
 
-modernize-fix:
-	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix $(shell go list ./... | grep -v /shared/gen/)
+lint-sdk:
+	@golangci-lint run ./sdk/...
+
+lint-shared:
+	@golangci-lint run ./shared/...
+
+fmt: fmt-rune fmt-sdk fmt-shared
+
+fmt-rune:
+	@gofmt -l -w ./rune
+
+fmt-sdk:
+	@gofmt -l -w ./sdk
+
+fmt-shared:
+	@gofmt -l -w ./shared
+
+fmt-check: fmt-check-rune fmt-check-sdk fmt-check-shared
+
+fmt-check-rune:
+	@test -z "$$(gofmt -l ./rune)"
+
+fmt-check-sdk:
+	@test -z "$$(gofmt -l ./sdk)"
+
+fmt-check-shared:
+	@test -z "$$(gofmt -l ./shared)"
+
+vet: vet-rune vet-sdk vet-shared
+
+vet-rune:
+	@go vet ./rune/...
+
+vet-sdk:
+	@go vet ./sdk/...
+
+vet-shared:
+	@go vet ./shared/...
+
+modernize: modernize-rune modernize-sdk modernize-shared
+
+modernize-rune:
+	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest ./rune/...
+
+modernize-sdk:
+	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest ./sdk/...
+
+modernize-shared:
+	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest $(shell go list ./shared/... | grep -v /shared/gen/)
+
+modernize-fix: modernize-fix-rune modernize-fix-sdk modernize-fix-shared
+
+modernize-fix-rune:
+	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix ./rune/...
+
+modernize-fix-sdk:
+	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix ./sdk/...
+
+modernize-fix-shared:
+	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix $(shell go list ./shared/... | grep -v /shared/gen/)
 
 # Local 3-node cluster + etcd via docker-compose (nodes on host ports 7946/7947/7948).
 cluster-up:
