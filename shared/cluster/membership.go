@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bryandguy/rune/internal/logging"
-	"github.com/bryandguy/rune/internal/router"
+	"github.com/bryandguy/rune/shared/logging"
+	"github.com/bryandguy/rune/shared/router"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )

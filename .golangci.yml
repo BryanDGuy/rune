@@ -50,7 +50,7 @@ linters:
         no-direct-logging:
           files:
             - "**/*.go"
-            - "!**/internal/logging/*.go"
+            - "!**/shared/logging/*.go"
           deny:
             - pkg: log
               desc: log through internal/logging.Logger, not log or slog directly

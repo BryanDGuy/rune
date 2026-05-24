@@ -10,11 +10,11 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	_ "google.golang.org/grpc/encoding/gzip" // registers gzip decompressor for compressed client requests
 
-	"github.com/bryandguy/rune/internal/cluster"
 	"github.com/bryandguy/rune/internal/config"
-	"github.com/bryandguy/rune/internal/logging"
 	"github.com/bryandguy/rune/internal/server"
 	"github.com/bryandguy/rune/internal/storage"
+	"github.com/bryandguy/rune/shared/cluster"
+	"github.com/bryandguy/rune/shared/logging"
 )
 
 func main() {

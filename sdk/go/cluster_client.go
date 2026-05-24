@@ -7,8 +7,8 @@ import (
 	"io"
 	"sync"
 
-	"github.com/bryandguy/rune/internal/cluster"
-	"github.com/bryandguy/rune/internal/router"
+	"github.com/bryandguy/rune/shared/cluster"
+	"github.com/bryandguy/rune/shared/router"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

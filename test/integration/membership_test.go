@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bryandguy/rune/internal/cluster"
+	"github.com/bryandguy/rune/shared/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	clientv3 "go.etcd.io/etcd/client/v3"
