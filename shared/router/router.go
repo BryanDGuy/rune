@@ -27,6 +27,15 @@ type xxHasher struct{}
 
 func (h xxHasher) Sum64(data []byte) uint64 { return xxhash.Sum64(data) }
 
+func newRing() *consistent.Consistent {
+	return consistent.New(nil, consistent.Config{
+		PartitionCount:    271, // prime; distributes partitions evenly across the ring
+		ReplicationFactor: 20,
+		Load:              10.0,
+		Hasher:            xxHasher{},
+	})
+}
+
 type Router struct {
 	ring  *consistent.Consistent
 	nodes map[string]Node
@@ -36,16 +45,25 @@ type Router struct {
 // New creates a Router. Load is set high to disable bounded-load redistribution,
 // preserving standard consistent hash stability: only keys owned by a removed node remap.
 func New() *Router {
-	cfg := consistent.Config{
-		PartitionCount:    271, // prime; distributes partitions evenly across the ring
-		ReplicationFactor: 20,
-		Load:              10.0,
-		Hasher:            xxHasher{},
-	}
 	return &Router{
-		ring:  consistent.New(nil, cfg),
+		ring:  newRing(),
 		nodes: make(map[string]Node),
 	}
+}
+
+// Reset atomically replaces the ring contents with nodes. Used after a watch
+// resync to reconcile the ring against a fresh etcd snapshot.
+func (r *Router) Reset(nodes []Node) {
+	newRing := newRing()
+	newNodes := make(map[string]Node, len(nodes))
+	for _, n := range nodes {
+		newRing.Add(n)
+		newNodes[n.ID] = n
+	}
+	r.mu.Lock()
+	r.ring = newRing
+	r.nodes = newNodes
+	r.mu.Unlock()
 }
 
 func (r *Router) Add(node Node) {

@@ -77,13 +77,14 @@ func (m *Membership) Start(ctx context.Context) error {
 		}
 	}
 
-	if err := m.populate(ctx); err != nil {
+	rev, err := m.populate(ctx)
+	if err != nil {
 		m.cancel()
 		m.wg.Wait()
 		return fmt.Errorf("populate ring: %w", err)
 	}
 
-	m.wg.Go(func() { m.watchLoop(ctx) })
+	m.wg.Go(func() { m.watchLoop(ctx, rev) })
 	return nil
 }
 
@@ -146,22 +147,33 @@ func (m *Membership) reregister(ctx context.Context) {
 	}
 }
 
-func (m *Membership) populate(ctx context.Context) error {
+func (m *Membership) populate(ctx context.Context) (int64, error) {
 	resp, err := m.store.Get(ctx, router.NodeKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
-		return err
+		return 0, err
 	}
+	nodes := make([]router.Node, 0, len(resp.Kvs))
 	for _, kv := range resp.Kvs {
-		m.applyPut(kv.Value)
+		var node router.Node
+		if err := json.Unmarshal(kv.Value, &node); err != nil {
+			continue
+		}
+		nodes = append(nodes, node)
 	}
-	return nil
+	m.ring.Reset(nodes)
+	return resp.Header.GetRevision(), nil
 }
 
-func (m *Membership) watchLoop(ctx context.Context) {
+func (m *Membership) watchLoop(ctx context.Context, rev int64) {
 	for {
-		wch := m.store.Watch(ctx, router.NodeKeyPrefix, clientv3.WithPrefix())
+		opts := []clientv3.OpOption{clientv3.WithPrefix(), clientv3.WithRev(rev + 1)}
+		wch := m.store.Watch(ctx, router.NodeKeyPrefix, opts...)
 		for wresp := range wch {
+			if wresp.Err() != nil {
+				break
+			}
 			for _, ev := range wresp.Events {
+				rev = ev.Kv.ModRevision
 				switch ev.Type {
 				case mvccpb.PUT:
 					if id, ok := m.applyPut(ev.Kv.Value); ok && id != m.nodeID {
@@ -179,13 +191,15 @@ func (m *Membership) watchLoop(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		// An unexpected watch drop (ctx still live) may have skipped events, leaving the ring stale.
+		// Watch dropped while ctx is still live — backoff then resync to recover any missed events.
 		m.logger.Warn("watch dropped, resyncing ring")
-		_ = m.populate(ctx)
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(time.Second):
+		}
+		if newRev, err := m.populate(ctx); err == nil {
+			rev = newRev
 		}
 	}
 }

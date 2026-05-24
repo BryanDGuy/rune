@@ -33,11 +33,12 @@ func newDiscovery(store etcdReader) *discovery {
 
 func (d *discovery) start(ctx context.Context) error {
 	ctx, d.cancel = context.WithCancel(ctx)
-	if err := d.populate(ctx); err != nil {
+	rev, err := d.populate(ctx)
+	if err != nil {
 		d.cancel()
 		return err
 	}
-	d.wg.Go(func() { d.watchLoop(ctx) })
+	d.wg.Go(func() { d.watchLoop(ctx, rev) })
 	return nil
 }
 
@@ -48,22 +49,33 @@ func (d *discovery) stop() {
 	d.wg.Wait()
 }
 
-func (d *discovery) populate(ctx context.Context) error {
+func (d *discovery) populate(ctx context.Context) (int64, error) {
 	resp, err := d.store.Get(ctx, router.NodeKeyPrefix, clientv3.WithPrefix())
 	if err != nil {
-		return err
+		return 0, err
 	}
+	nodes := make([]router.Node, 0, len(resp.Kvs))
 	for _, kv := range resp.Kvs {
-		d.applyPut(kv.Value)
+		var node router.Node
+		if err := json.Unmarshal(kv.Value, &node); err != nil {
+			continue
+		}
+		nodes = append(nodes, node)
 	}
-	return nil
+	d.ring.Reset(nodes)
+	return resp.Header.GetRevision(), nil
 }
 
-func (d *discovery) watchLoop(ctx context.Context) {
+func (d *discovery) watchLoop(ctx context.Context, rev int64) {
 	for {
-		wch := d.store.Watch(ctx, router.NodeKeyPrefix, clientv3.WithPrefix())
+		opts := []clientv3.OpOption{clientv3.WithPrefix(), clientv3.WithRev(rev + 1)}
+		wch := d.store.Watch(ctx, router.NodeKeyPrefix, opts...)
 		for wresp := range wch {
+			if wresp.Err() != nil {
+				break
+			}
 			for _, ev := range wresp.Events {
+				rev = ev.Kv.ModRevision
 				switch ev.Type {
 				case mvccpb.PUT:
 					d.applyPut(ev.Kv.Value)
@@ -76,12 +88,14 @@ func (d *discovery) watchLoop(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		// Watch dropped while ctx is still live — ring may be stale; resync.
-		_ = d.populate(ctx)
+		// Watch dropped while ctx is still live — backoff then resync to recover any missed events.
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(time.Second):
+		}
+		if newRev, err := d.populate(ctx); err == nil {
+			rev = newRev
 		}
 	}
 }
