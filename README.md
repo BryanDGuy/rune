@@ -59,7 +59,7 @@ To reproduce: `make cluster-up && make bench`
 
 ```bash
 # Build
-go build -o rune ./cmd/rune
+go build -o rune ./rune/cmd/rune
 
 # Run with defaults (port 7946, data in /var/rune/data)
 ./rune
@@ -97,7 +97,7 @@ etcdClient, err := clientv3.New(clientv3.Config{Endpoints: []string{"etcd:2379"}
 if err != nil { ... }
 defer etcdClient.Close()
 
-client, err := runesdk.NewClusterClient(etcdClient, "")
+client, err := runesdk.NewClusterClient(etcdClient)
 if err != nil { ... }
 defer client.Close()
 ```
@@ -131,7 +131,7 @@ io.Copy(dest, r) // streams chunk-by-chunk, never buffers the full value
 
 ## Direct gRPC access (non-Go clients)
 
-The Go SDK is the most convenient client, but Rune's interface is plain gRPC — any language can generate a client from [`proto/rune/v1/rune.proto`](proto/rune/v1/rune.proto) and call it directly.
+The Go SDK is the most convenient client, but Rune's interface is plain gRPC — any language can generate a client from [`shared/proto/rune/v1/rune.proto`](shared/proto/rune/v1/rune.proto) and call it directly.
 
 In cluster mode you can connect to **any** node: if it doesn't own the requested key, it forwards the request to the node that does and relays the response back. So a direct client always gets correct results without knowing the ring layout — at the cost of one extra hop for keys the entry node doesn't own.
 
