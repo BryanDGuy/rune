@@ -12,7 +12,7 @@
 x-rune: &rune
   build:
     context: ..
-    dockerfile: Dockerfile
+    dockerfile: rune/Dockerfile
   restart: unless-stopped
   depends_on:
     etcd:

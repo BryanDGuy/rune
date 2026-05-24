@@ -692,7 +692,7 @@ const file_rune_v1_rune_proto_rawDesc = "" +
 	"\x03Set\x12\x13.rune.v1.SetRequest\x1a\x14.rune.v1.SetResponse(\x01\x129\n" +
 	"\x06Delete\x12\x16.rune.v1.DeleteRequest\x1a\x17.rune.v1.DeleteResponse\x129\n" +
 	"\x06Exists\x12\x16.rune.v1.ExistsRequest\x1a\x17.rune.v1.ExistsResponse\x123\n" +
-	"\x04Info\x12\x14.rune.v1.InfoRequest\x1a\x15.rune.v1.InfoResponseB.Z,github.com/bryandguy/rune/gen/rune/v1;runev1b\x06proto3"
+	"\x04Info\x12\x14.rune.v1.InfoRequest\x1a\x15.rune.v1.InfoResponseB5Z3github.com/bryandguy/rune/shared/gen/rune/v1;runev1b\x06proto3"
 
 var (
 	file_rune_v1_rune_proto_rawDescOnce sync.Once
