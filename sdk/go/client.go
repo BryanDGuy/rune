@@ -7,7 +7,7 @@ import (
 	"io"
 	"time"
 
-	runev1 "github.com/bryandguy/rune/gen/rune/v1"
+	runev1 "github.com/bryandguy/rune/shared/gen/rune/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	_ "google.golang.org/grpc/encoding/gzip" // registers gzip compressor for SetOptions.Compress

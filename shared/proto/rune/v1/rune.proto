@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package rune.v1;
 
-option go_package = "github.com/bryandguy/rune/gen/rune/v1;runev1";
+option go_package = "github.com/bryandguy/rune/shared/gen/rune/v1;runev1";
 
 // RuneService is a large-blob cache optimized for values 1MB and above.
 service RuneService {

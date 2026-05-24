@@ -8,11 +8,11 @@ build:
 
 proto:
 	protoc \
-		--go_out=gen \
+		--go_out=shared/gen \
 		--go_opt=paths=source_relative \
-		--go-grpc_out=gen \
+		--go-grpc_out=shared/gen \
 		--go-grpc_opt=paths=source_relative \
-		--proto_path=proto \
+		--proto_path=shared/proto \
 		rune/v1/rune.proto
 
 tidy:
@@ -43,10 +43,10 @@ vet:
 	@go vet ./...
 
 modernize:
-	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest $(shell go list ./... | grep -v /gen/)
+	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest $(shell go list ./... | grep -v /shared/gen/)
 
 modernize-fix:
-	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix $(shell go list ./... | grep -v /gen/)
+	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix $(shell go list ./... | grep -v /shared/gen/)
 
 # Local 3-node cluster + etcd via docker-compose (nodes on host ports 7946/7947/7948).
 cluster-up:
