@@ -31,6 +31,7 @@ rune/                        ← repo root
 │   │   ├── cluster/         ← server membership + peer dialer (etcd registration, keepalive)
 │   │   ├── config/
 │   │   ├── logging/         ← server logging surface
+│   │   ├── router/          ← consistent hash ring; Node type is the etcd wire format
 │   │   ├── server/
 │   │   └── storage/
 │   ├── test/
@@ -48,15 +49,14 @@ rune/                        ← repo root
     ├── go.mod
     ├── go.sum
     ├── gen/rune/v1/         ← generated proto types
-    ├── proto/rune/v1/       ← .proto source definitions
-    └── router/              ← consistent hash ring; Node type is the etcd wire format
+    └── proto/rune/v1/       ← .proto source definitions
 ```
 
 `bin/` (build output) stays at root and is not moved.
 
-**What belongs in shared/:** Only protocol-level code that both the server and SDK must agree on — the gRPC types (proto) and the consistent hash ring algorithm with its `Node` type. `router.Node` doubles as the etcd wire format (via JSON tags), so there is no separate `NodeInfo` struct.
+**What belongs in shared/:** Only the gRPC wire format — the generated proto types and the `.proto` source. `shared/` is a proto-only module; no hand-written Go logic lives there.
 
-**What belongs in rune/internal/:** Server implementation details — node registration, lease keepalive, peer dialing, logging. None of this is relevant to SDK consumers.
+**What belongs in rune/internal/:** Server implementation details — node registration, lease keepalive, peer dialing, consistent hash ring, logging. None of this is relevant to SDK consumers.
 
 **SDK routing:** The SDK's `ClusterClient` does not watch etcd or maintain a hash ring. It accepts a list of node addresses at construction time, round-robins uncached keys across them, and caches the owning node's address from the `x-rune-owner` response header. This keeps the SDK free of etcd and ring-algorithm dependencies.
 
@@ -69,7 +69,7 @@ All files importing the packages below must be updated.
 | Before | After |
 |--------|-------|
 | `github.com/bryandguy/rune/internal/cluster` | `github.com/bryandguy/rune/rune/internal/cluster` |
-| `github.com/bryandguy/rune/internal/router` | `github.com/bryandguy/rune/shared/router` |
+| `github.com/bryandguy/rune/internal/router` | `github.com/bryandguy/rune/rune/internal/router` |
 | `github.com/bryandguy/rune/internal/logging` | `github.com/bryandguy/rune/rune/internal/logging` |
 | `github.com/bryandguy/rune/internal/config` | `github.com/bryandguy/rune/rune/internal/config` |
 | `github.com/bryandguy/rune/internal/server` | `github.com/bryandguy/rune/rune/internal/server` |
