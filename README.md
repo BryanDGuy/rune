@@ -38,7 +38,7 @@ Pods (Go SDK / direct gRPC)
                           └───────────┘
 ```
 
-Single-node mode requires no etcd — just run one node. In cluster mode, set `RUNE_ETCD_ENDPOINTS` and each node registers itself, watches for peers, and routes misrouted requests to the owning node. The SDK's `ClusterClient` watches etcd and routes directly to the owning node, skipping the server-side hop entirely. Each key lives on a single owning node; if that node goes down its keys become cache misses until refetched from source.
+Single-node mode requires no etcd — just run one node. In cluster mode, set `RUNE_ETCD_ENDPOINTS` and each node registers itself, watches for peers, and routes misrouted requests to the owning node. The SDK's `ClusterClient` caches the owning node's address from the `x-rune-owner` response header, routing subsequent requests directly and skipping the server-side forwarding hop. Each key lives on a single owning node; if that node goes down its keys become cache misses until refetched from source.
 
 ## Performance
 
@@ -85,24 +85,17 @@ client := runesdk.NewClient(conn)
 defer client.Close()
 ```
 
-### Connecting (cluster mode, requires etcd)
+### Connecting (cluster mode)
 
 ```go
-import (
-    runesdk "github.com/bryandguy/rune/sdk/go"
-    clientv3 "go.etcd.io/etcd/client/v3"
-)
+import runesdk "github.com/bryandguy/rune/sdk/go"
 
-etcdClient, err := clientv3.New(clientv3.Config{Endpoints: []string{"etcd:2379"}})
-if err != nil { ... }
-defer etcdClient.Close()
-
-client, err := runesdk.NewClusterClient(etcdClient)
+client, err := runesdk.NewClusterClient("node-a:7946", "node-b:7946", "node-c:7946")
 if err != nil { ... }
 defer client.Close()
 ```
 
-`ClusterClient` routes each key to its owning node automatically. The `Set`/`Get` interface is identical to the single-node client.
+`ClusterClient` round-robins initial requests across the provided addresses, then caches the `x-rune-owner` response header so subsequent requests for the same key go directly to the owning node. The `Set`/`Get`/`Delete` interface is identical to the single-node client.
 
 ### Using the client
 

@@ -42,8 +42,7 @@ rune/                        ← repo root
 ├── sdk/
 │   └── go/                  (module: github.com/bryandguy/rune/sdk/go)
 │       ├── go.mod
-│       ├── go.sum
-│       └── discovery.go     ← minimal etcd watcher (no registration, no logging)
+│       └── go.sum
 │
 └── shared/                  (module: github.com/bryandguy/rune/shared)
     ├── go.mod
@@ -59,7 +58,7 @@ rune/                        ← repo root
 
 **What belongs in rune/internal/:** Server implementation details — node registration, lease keepalive, peer dialing, logging. None of this is relevant to SDK consumers.
 
-**SDK discovery vs server cluster:** The server's `cluster.Membership` registers nodes in etcd and maintains lease keepalive. The SDK only needs to watch `/rune/nodes/` and populate a ring — `discovery.go` does exactly that in ~80 lines with no server dependencies and no logging.
+**SDK routing:** The SDK's `ClusterClient` does not watch etcd or maintain a hash ring. It accepts a list of node addresses at construction time, round-robins uncached keys across them, and caches the owning node's address from the `x-rune-owner` response header. This keeps the SDK free of etcd and ring-algorithm dependencies.
 
 `testutil` lives at `rune/test/testutil/` because it imports server internals (`config`, `server`, `storage`). Being outside any `internal/` directory, SDK tests can still import it.
 

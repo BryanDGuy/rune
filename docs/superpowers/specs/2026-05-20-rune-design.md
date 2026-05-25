@@ -39,7 +39,7 @@ Pods (Go SDK / direct gRPC)
                           └───────────┘
 ```
 
-The SDK is cluster-aware — it caches the hash ring locally and connects directly to the owning node for each key, eliminating proxy hops. The ring is fetched from etcd on startup and kept up to date via a watch.
+The SDK is cluster-aware — `ClusterClient` caches the owning node's address from the `x-rune-owner` response header returned by every Get and Set. After the first request for a key, the client routes subsequent requests directly to the owning node, eliminating proxy hops without requiring the SDK to maintain an etcd connection or a local ring.
 
 ## Components
 
@@ -85,12 +85,13 @@ Determines key ownership using consistent hashing.
 Rune stores a **single copy** of each key, on its owning node — there are no replicas. Rune makes no durability guarantees; the source of truth always lives outside Rune (S3, database, etc.). If a node goes down, the keys it owned become cache misses until callers refetch them from source — an expected and acceptable failure mode for a cache.
 
 **Write path:**
-1. The SDK hashes the key locally and connects directly to the owning node
-2. The owner stores the value in BadgerDB and returns success
+1. The SDK picks a node (cached owner if known, otherwise round-robin across the configured addresses)
+2. If that node doesn't own the key, it forwards the request to the owner and relays the response; the `x-rune-owner` header in the response tells the SDK who the real owner is
+3. The SDK caches `key → owner address` so subsequent writes go directly to the owner
 
 **Read path:**
-1. The SDK hashes the key locally and connects directly to the owning node
-2. If the owner is unavailable, the SDK returns a cache miss — the caller fetches from source
+1. Same routing as write — cached owner if known, otherwise round-robin
+2. On a cache miss from the owning node, the SDK surfaces `ErrNotFound` and the caller fetches from source
 
 **Owner placement** is computed, not stored. Given a key and the current hash ring, the owner is the first node clockwise from the key's hash position. Any node — and the SDK itself — can compute it from just the key and the ring. No per-key tracking in etcd is needed.
 
