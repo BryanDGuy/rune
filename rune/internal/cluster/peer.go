@@ -19,13 +19,14 @@ type DialOptions struct {
 
 // PeerDialer maintains a pool of gRPC connections to peer Rune nodes.
 type PeerDialer struct {
-	conns  map[string]*grpc.ClientConn
-	mu     sync.RWMutex
-	closed bool
+	conns    map[string]*grpc.ClientConn
+	injected map[string]bool // true = externally owned, must not be closed by Close
+	mu       sync.RWMutex
+	closed   bool
 }
 
 func NewPeerDialer() *PeerDialer {
-	return &PeerDialer{conns: make(map[string]*grpc.ClientConn)}
+	return &PeerDialer{conns: make(map[string]*grpc.ClientConn), injected: make(map[string]bool)}
 }
 
 func (d *PeerDialer) Dial(addr string, opts *DialOptions) (*grpc.ClientConn, error) {
@@ -73,6 +74,7 @@ func (d *PeerDialer) DialWith(addr string, conn *grpc.ClientConn) error {
 		return errDialerClosed
 	}
 	d.conns[addr] = conn
+	d.injected[addr] = true
 	return nil
 }
 
@@ -80,8 +82,11 @@ func (d *PeerDialer) Close() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.closed = true
-	for _, conn := range d.conns {
-		_ = conn.Close()
+	for addr, conn := range d.conns {
+		if !d.injected[addr] {
+			_ = conn.Close()
+		}
 	}
 	d.conns = nil
+	d.injected = nil
 }

@@ -13,10 +13,9 @@ import (
 	"time"
 
 	runesdk "github.com/bryandguy/rune/sdk/go"
-	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-var etcdAddr = flag.String("etcd", "localhost:2379", "etcd endpoint")
+var nodesFlag = flag.String("nodes", "localhost:7946", "comma-separated Rune node addresses")
 
 type benchResult struct {
 	setP50        time.Duration
@@ -47,22 +46,14 @@ func main() {
 }
 
 func run() error {
-	etcdClient, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{*etcdAddr},
-		DialTimeout: 5 * time.Second,
-	})
-	if err != nil {
-		return fmt.Errorf("etcd: %w", err)
-	}
-	defer etcdClient.Close()
-
-	client, err := runesdk.NewClusterClient(etcdClient)
+	addrs := strings.Split(*nodesFlag, ",")
+	client, err := runesdk.NewClusterClient(addrs...)
 	if err != nil {
 		return fmt.Errorf("cluster client: %w", err)
 	}
 	defer client.Close()
 
-	fmt.Printf("Rune cluster benchmark — etcd: %s\n\n", *etcdAddr)
+	fmt.Printf("Rune cluster benchmark — nodes: %s\n\n", *nodesFlag)
 
 	header := fmt.Sprintf("%-10s  %-10s  %-10s  %-10s  %-10s  %-10s  %-10s",
 		"Blob Size", "Set p50", "Set p99", "Get p50", "Get p99", "Set MB/s", "Get MB/s")

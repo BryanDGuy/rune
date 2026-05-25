@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	_ "google.golang.org/grpc/encoding/gzip" // registers gzip compressor for SetOptions.Compress
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -76,6 +77,13 @@ func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts *SetOpti
 
 // Caller must Close() the reader when done. Returns ErrNotFound if key is missing.
 func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
+	return c.getWithHint(ctx, key, nil)
+}
+
+// getWithHint is Get with optional response-header capture. If md is non-nil,
+// it is populated with the server's initial metadata (including x-rune-owner)
+// before this function returns.
+func (c *Client) getWithHint(ctx context.Context, key string, md *metadata.MD) (io.ReadCloser, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	stream, err := c.grpc.Get(ctx, &runev1.GetRequest{Key: key})
 	if err != nil {
@@ -84,6 +92,13 @@ func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 			return nil, ErrNotFound
 		}
 		return nil, err
+	}
+
+	// Block until the server sends its initial metadata frame, which always
+	// precedes any data frames in HTTP/2. For forwarded requests this includes
+	// x-rune-owner; for single-node requests the header is empty.
+	if md != nil {
+		*md, _ = stream.Header()
 	}
 
 	// Eagerly probe the first message so we can surface NotFound immediately.

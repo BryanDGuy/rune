@@ -142,4 +142,4 @@ bench:
 	docker run --rm \
 		--network rune_default \
 		-v $(PWD)/$(BENCH_BINARY):/bench \
-		debian:stable-slim /bench -etcd etcd:2379
+		debian:stable-slim /bench -nodes rune-a:7946,rune-b:7946,rune-c:7946
