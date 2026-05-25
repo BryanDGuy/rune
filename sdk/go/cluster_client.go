@@ -131,6 +131,12 @@ func (c *ClusterClient) clientFor(key string) (*Client, error) {
 	return c.connFor(addr)
 }
 
+func (c *ClusterClient) isClosed() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.closed
+}
+
 // cacheHint stores the x-rune-owner address from md under key.
 func (c *ClusterClient) cacheHint(key string, md metadata.MD) {
 	vals := md["x-rune-owner"]
@@ -150,6 +156,9 @@ func (c *ClusterClient) Get(ctx context.Context, key string) (io.ReadCloser, err
 	var md metadata.MD
 	rc, err := client.getWithHint(ctx, key, &md)
 	if err != nil {
+		if c.isClosed() {
+			return nil, errClusterClientClosed
+		}
 		return nil, err
 	}
 	c.cacheHint(key, md)
@@ -161,7 +170,15 @@ func (c *ClusterClient) Set(ctx context.Context, key string, r io.Reader, opts *
 	if err != nil {
 		return err
 	}
-	return client.Set(ctx, key, r, opts)
+	var md metadata.MD
+	if err := client.setWithHint(ctx, key, r, opts, &md); err != nil {
+		if c.isClosed() {
+			return errClusterClientClosed
+		}
+		return err
+	}
+	c.cacheHint(key, md)
+	return nil
 }
 
 // Delete removes keys from the cluster. Keys with a cached owner are routed

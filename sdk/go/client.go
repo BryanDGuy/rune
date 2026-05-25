@@ -28,6 +28,13 @@ func NewClient(conn *grpc.ClientConn) *Client {
 
 // Chunked via client-streaming gRPC in 1MB pieces.
 func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts *SetOptions) error {
+	return c.setWithHint(ctx, key, r, opts, nil)
+}
+
+// setWithHint is Set with optional response-header capture. If md is non-nil,
+// it is populated with the server's initial metadata (including x-rune-owner)
+// after the RPC completes.
+func (c *Client) setWithHint(ctx context.Context, key string, r io.Reader, opts *SetOptions, md *metadata.MD) error {
 	var ttl time.Duration
 	var callOpts []grpc.CallOption
 	if opts != nil {
@@ -71,8 +78,13 @@ func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts *SetOpti
 		}
 	}
 
-	_, err = stream.CloseAndRecv()
-	return err
+	if _, err = stream.CloseAndRecv(); err != nil {
+		return err
+	}
+	if md != nil {
+		*md, _ = stream.Header()
+	}
+	return nil
 }
 
 // Caller must Close() the reader when done. Returns ErrNotFound if key is missing.

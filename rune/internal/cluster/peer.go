@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 
@@ -72,6 +73,9 @@ func (d *PeerDialer) DialWith(addr string, conn *grpc.ClientConn) error {
 	defer d.mu.Unlock()
 	if d.closed {
 		return errDialerClosed
+	}
+	if _, exists := d.conns[addr]; exists {
+		return fmt.Errorf("cluster: DialWith: connection for %s already registered", addr)
 	}
 	d.conns[addr] = conn
 	d.injected[addr] = true
