@@ -2,7 +2,7 @@ package testutil
 
 import (
 	"github.com/bryandguy/rune/rune/internal/cluster"
-	"github.com/bryandguy/rune/shared/router"
+	"github.com/bryandguy/rune/rune/internal/router"
 )
 
 type fakeMembership struct {

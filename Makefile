@@ -115,7 +115,7 @@ modernize-sdk:
 	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest ./sdk/go/...
 
 modernize-shared:
-	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest $(shell go list ./shared/... | grep -v /shared/gen/)
+	@pkgs=$$(go list ./shared/... | grep -v /shared/gen/); [ -z "$$pkgs" ] || go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest $$pkgs
 
 modernize-fix: modernize-fix-rune modernize-fix-sdk modernize-fix-shared
 
@@ -126,7 +126,7 @@ modernize-fix-sdk:
 	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix ./sdk/go/...
 
 modernize-fix-shared:
-	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix $(shell go list ./shared/... | grep -v /shared/gen/)
+	@pkgs=$$(go list ./shared/... | grep -v /shared/gen/); [ -z "$$pkgs" ] || go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix $$pkgs
 
 # Local 3-node cluster + etcd via docker-compose (nodes on host ports 7946/7947/7948).
 cluster-up:

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bryandguy/rune/shared/router"
+	"github.com/bryandguy/rune/rune/internal/router"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/api/v3/mvccpb"

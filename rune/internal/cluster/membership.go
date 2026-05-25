@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/bryandguy/rune/rune/internal/logging"
-	"github.com/bryandguy/rune/shared/router"
+	"github.com/bryandguy/rune/rune/internal/router"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
