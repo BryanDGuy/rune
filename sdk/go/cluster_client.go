@@ -131,12 +131,6 @@ func (c *ClusterClient) clientFor(key string) (*Client, error) {
 	return c.connFor(addr)
 }
 
-func (c *ClusterClient) isClosed() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.closed
-}
-
 // cacheHint stores the x-rune-owner address from md under key.
 func (c *ClusterClient) cacheHint(key string, md metadata.MD) {
 	vals := md["x-rune-owner"]
@@ -144,7 +138,9 @@ func (c *ClusterClient) cacheHint(key string, md metadata.MD) {
 		return
 	}
 	c.mu.Lock()
-	c.cache[key] = vals[0]
+	if !c.closed {
+		c.cache[key] = vals[0]
+	}
 	c.mu.Unlock()
 }
 
@@ -155,9 +151,6 @@ func (c *ClusterClient) Get(ctx context.Context, key string) (io.ReadCloser, err
 	}
 	rc, md, err := client.get(ctx, key)
 	if err != nil {
-		if c.isClosed() {
-			return nil, errClusterClientClosed
-		}
 		return nil, err
 	}
 	c.cacheHint(key, md)
@@ -171,9 +164,6 @@ func (c *ClusterClient) Set(ctx context.Context, key string, r io.Reader, opts *
 	}
 	md, err := client.set(ctx, key, r, opts)
 	if err != nil {
-		if c.isClosed() {
-			return errClusterClientClosed
-		}
 		return err
 	}
 	c.cacheHint(key, md)
@@ -220,5 +210,6 @@ func (c *ClusterClient) Close() error {
 		_ = client.Close()
 	}
 	c.clients = nil
+	c.cache = nil
 	return nil
 }
