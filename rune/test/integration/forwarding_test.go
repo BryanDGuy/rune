@@ -13,10 +13,10 @@ import (
 )
 
 func TestIntegrationForwardedSetGet(t *testing.T) {
-	conn2, cleanup2 := testutil.NewBufconnConn(t, 1<<20)
+	conn2, cleanup2 := testutil.NewBufconnConn(t, 1<<20, nil)
 	defer cleanup2()
 
-	conn1, cleanup1 := testutil.NewBufconnConnWithForwarding(t, 1<<20, conn2)
+	conn1, cleanup1 := testutil.NewBufconnConn(t, 1<<20, &testutil.BufconnOptions{ForwardTo: conn2})
 	defer cleanup1()
 
 	ctx := context.Background()
@@ -37,9 +37,9 @@ func TestIntegrationForwardedSetGet(t *testing.T) {
 }
 
 func TestIntegrationForwardedGetNotFound(t *testing.T) {
-	conn2, cleanup2 := testutil.NewBufconnConn(t, 1<<20)
+	conn2, cleanup2 := testutil.NewBufconnConn(t, 1<<20, nil)
 	defer cleanup2()
-	conn1, cleanup1 := testutil.NewBufconnConnWithForwarding(t, 1<<20, conn2)
+	conn1, cleanup1 := testutil.NewBufconnConn(t, 1<<20, &testutil.BufconnOptions{ForwardTo: conn2})
 	defer cleanup1()
 
 	client1 := runesdk.NewClient(conn1)

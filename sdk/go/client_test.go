@@ -15,7 +15,7 @@ import (
 
 func newTestSDKClient(t *testing.T) (*runesdk.Client, func()) {
 	t.Helper()
-	conn, cleanup := testutil.NewBufconnConn(t, 1<<20)
+	conn, cleanup := testutil.NewBufconnConn(t, 1<<20, nil)
 	return runesdk.NewClient(conn), cleanup
 }
 

@@ -42,14 +42,6 @@ type ClusterClient struct {
 	closed  bool
 }
 
-func defaultDial(addr string) (*Client, error) {
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, fmt.Errorf("dial %s: %w", addr, err)
-	}
-	return NewClient(conn), nil
-}
-
 // NewClusterClient creates a ClusterClient that distributes initial requests across
 // addrs and caches owner hints for subsequent requests. At least one address is
 // required. Pass opts.Dial to control how connections to new node addresses are
@@ -58,7 +50,13 @@ func NewClusterClient(addrs []string, opts *ClusterOptions) (*ClusterClient, err
 	if len(addrs) == 0 {
 		return nil, errors.New("cluster: at least one node address required")
 	}
-	dial := defaultDial
+	dial := func(addr string) (*Client, error) {
+		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			return nil, fmt.Errorf("dial %s: %w", addr, err)
+		}
+		return NewClient(conn), nil
+	}
 	if opts != nil && opts.Dial != nil {
 		dial = opts.Dial
 	}

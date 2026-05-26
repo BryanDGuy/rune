@@ -28,7 +28,7 @@ const bufSize = 1 << 20 // 1MB bufconn buffer
 
 func newTestConn(t *testing.T) (*grpc.ClientConn, func()) {
 	t.Helper()
-	return testutil.NewBufconnConn(t, bufSize)
+	return testutil.NewBufconnConn(t, bufSize, nil)
 }
 
 func newTestClient(t *testing.T) (runev1.RuneServiceClient, func()) {
@@ -240,7 +240,7 @@ func TestInfo(t *testing.T) {
 
 func TestForwardingGet(t *testing.T) {
 	// Start the "owning" node (node-2) and write a value to it.
-	conn2, cleanup2 := testutil.NewBufconnConn(t, bufSize)
+	conn2, cleanup2 := testutil.NewBufconnConn(t, bufSize, nil)
 	defer cleanup2()
 
 	rawClient2 := runev1.NewRuneServiceClient(conn2)
@@ -252,7 +252,7 @@ func TestForwardingGet(t *testing.T) {
 	require.NoError(t, err)
 
 	// Start a forwarding node (node-1) that routes all keys to node-2.
-	conn1, cleanup1 := testutil.NewBufconnConnWithForwarding(t, bufSize, conn2)
+	conn1, cleanup1 := testutil.NewBufconnConn(t, bufSize, &testutil.BufconnOptions{ForwardTo: conn2})
 	defer cleanup1()
 
 	// Get via node-1 should be forwarded to node-2.
@@ -274,11 +274,11 @@ func TestForwardingGet(t *testing.T) {
 
 func TestForwardingSet(t *testing.T) {
 	// The "owning" node.
-	conn2, cleanup2 := testutil.NewBufconnConn(t, bufSize)
+	conn2, cleanup2 := testutil.NewBufconnConn(t, bufSize, nil)
 	defer cleanup2()
 
 	// The forwarding node.
-	conn1, cleanup1 := testutil.NewBufconnConnWithForwarding(t, bufSize, conn2)
+	conn1, cleanup1 := testutil.NewBufconnConn(t, bufSize, &testutil.BufconnOptions{ForwardTo: conn2})
 	defer cleanup1()
 
 	// Set via node-1 — should be forwarded to node-2.
@@ -308,11 +308,11 @@ func TestForwardingSet(t *testing.T) {
 }
 
 func TestOwnerHintForwarding(t *testing.T) {
-	conn2, cleanup2 := testutil.NewBufconnConn(t, bufSize)
+	conn2, cleanup2 := testutil.NewBufconnConn(t, bufSize, nil)
 	defer cleanup2()
 	mustSet(t, runev1.NewRuneServiceClient(conn2), "fwd-key", []byte("v"))
 
-	conn1, cleanup1 := testutil.NewBufconnConnWithForwarding(t, bufSize, conn2)
+	conn1, cleanup1 := testutil.NewBufconnConn(t, bufSize, &testutil.BufconnOptions{ForwardTo: conn2})
 	defer cleanup1()
 
 	getStream, err := runev1.NewRuneServiceClient(conn1).Get(context.Background(), &runev1.GetRequest{Key: "fwd-key"})
@@ -415,9 +415,9 @@ func TestGracefulShutdown(t *testing.T) {
 func TestForwardingLoopPrevention(t *testing.T) {
 	// conn2 is the "owning" peer. conn1 is a forwarding server that routes
 	// all keys to conn2.
-	conn2, cleanup2 := testutil.NewBufconnConn(t, bufSize)
+	conn2, cleanup2 := testutil.NewBufconnConn(t, bufSize, nil)
 	defer cleanup2()
-	conn1, cleanup1 := testutil.NewBufconnConnWithForwarding(t, bufSize, conn2)
+	conn1, cleanup1 := testutil.NewBufconnConn(t, bufSize, &testutil.BufconnOptions{ForwardTo: conn2})
 	defer cleanup1()
 
 	// A request with x-rune-forwarded must be served locally regardless of
