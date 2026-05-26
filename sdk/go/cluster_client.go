@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -13,7 +12,6 @@ import (
 	runev1 "github.com/bryandguy/rune/shared/gen/rune/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
@@ -44,27 +42,20 @@ type ClusterClient struct {
 
 // NewClusterClient creates a ClusterClient that distributes initial requests across
 // addrs and caches owner hints for subsequent requests. At least one address is
-// required. Pass opts.Dial to control how connections to new node addresses are
-// opened; if nil, an insecure gRPC dialer is used.
+// required. opts.Dial must be set — it is called whenever a connection to a new
+// node address is needed.
 func NewClusterClient(addrs []string, opts *ClusterOptions) (*ClusterClient, error) {
 	if len(addrs) == 0 {
 		return nil, errors.New("cluster: at least one node address required")
 	}
-	dial := func(addr string) (*Client, error) {
-		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			return nil, fmt.Errorf("dial %s: %w", addr, err)
-		}
-		return NewClient(conn), nil
-	}
-	if opts != nil && opts.Dial != nil {
-		dial = opts.Dial
+	if opts == nil || opts.Dial == nil {
+		return nil, errors.New("cluster: opts.Dial is required")
 	}
 	return &ClusterClient{
 		addrs:   addrs,
 		cache:   make(map[string]string),
 		clients: make(map[string]*Client),
-		dialFn:  dial,
+		dialFn:  opts.Dial,
 	}, nil
 }
 

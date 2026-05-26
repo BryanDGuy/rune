@@ -135,7 +135,7 @@ func TestClusterClientGetNotFound(t *testing.T) {
 }
 
 func TestClusterClientNoAddrsError(t *testing.T) {
-	_, err := runesdk.NewClusterClient(nil, nil)
+	_, err := runesdk.NewClusterClient(nil, &runesdk.ClusterOptions{Dial: func(string) (*runesdk.Client, error) { return nil, nil }})
 	require.Error(t, err)
 }
 

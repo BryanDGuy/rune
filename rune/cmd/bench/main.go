@@ -13,6 +13,8 @@ import (
 	"time"
 
 	runesdk "github.com/bryandguy/rune/sdk/go"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var nodesFlag = flag.String("nodes", "localhost:7946", "comma-separated Rune node addresses")
@@ -47,7 +49,15 @@ func main() {
 
 func run() error {
 	addrs := strings.Split(*nodesFlag, ",")
-	client, err := runesdk.NewClusterClient(addrs, nil)
+	client, err := runesdk.NewClusterClient(addrs, &runesdk.ClusterOptions{
+		Dial: func(addr string) (*runesdk.Client, error) {
+			conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				return nil, fmt.Errorf("dial %s: %w", addr, err)
+			}
+			return runesdk.NewClient(conn), nil
+		},
+	})
 	if err != nil {
 		return fmt.Errorf("cluster client: %w", err)
 	}
