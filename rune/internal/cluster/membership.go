@@ -81,6 +81,11 @@ func (m *Membership) Start(ctx context.Context) error {
 	if err != nil {
 		m.cancel()
 		m.wg.Wait()
+		if m.leaseID != 0 {
+			rCtx, rCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer rCancel()
+			_, _ = m.store.Revoke(rCtx, m.leaseID)
+		}
 		return fmt.Errorf("populate ring: %w", err)
 	}
 
