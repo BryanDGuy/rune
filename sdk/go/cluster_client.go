@@ -147,7 +147,7 @@ func (c *ClusterClient) Get(ctx context.Context, key string) (io.ReadCloser, err
 	}
 	rc, md, err := clusterGet(ctx, client, key)
 	if err != nil {
-		if isNodeDown(err) {
+		if !errors.Is(err, ErrNotFound) {
 			c.evictHint(key)
 		}
 		return nil, err
@@ -163,22 +163,13 @@ func (c *ClusterClient) Set(ctx context.Context, key string, r io.Reader, opts *
 	}
 	md, err := clusterSet(ctx, client, key, r, opts)
 	if err != nil {
-		if isNodeDown(err) {
+		if !errors.Is(err, ErrNotFound) {
 			c.evictHint(key)
 		}
 		return err
 	}
 	c.cacheHint(key, md)
 	return nil
-}
-
-// isNodeDown reports whether err indicates the target node is unreachable.
-// Only Unavailable and Unknown (used by gRPC for connection-level failures like
-// TLS errors and connection resets) are treated as node-down — transient errors
-// like DeadlineExceeded or ResourceExhausted leave the cached hint intact.
-func isNodeDown(err error) bool {
-	c := status.Code(err)
-	return c == codes.Unavailable || c == codes.Unknown
 }
 
 // Delete removes keys from the cluster. Keys with a cached owner are routed
@@ -204,10 +195,8 @@ func (c *ClusterClient) Delete(ctx context.Context, keys ...string) error {
 			return err
 		}
 		if err := client.Delete(ctx, addrKeys...); err != nil {
-			if isNodeDown(err) {
-				for _, key := range addrKeys {
-					c.evictHint(key)
-				}
+			for _, key := range addrKeys {
+				c.evictHint(key)
 			}
 			return err
 		}
