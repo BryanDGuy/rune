@@ -88,14 +88,27 @@ defer client.Close()
 ### Connecting (cluster mode)
 
 ```go
-import runesdk "github.com/bryandguy/rune/sdk/go"
+import (
+    runesdk "github.com/bryandguy/rune/sdk/go"
+    "google.golang.org/grpc"
+    "google.golang.org/grpc/credentials/insecure"
+)
 
-client, err := runesdk.NewClusterClient("node-a:7946", "node-b:7946", "node-c:7946")
+addrs := []string{"node-a:7946", "node-b:7946", "node-c:7946"}
+client, err := runesdk.NewClusterClient(addrs, &runesdk.ClusterOptions{
+    Dial: func(addr string) (*runesdk.Client, error) {
+        conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+        if err != nil {
+            return nil, err
+        }
+        return runesdk.NewClient(conn), nil
+    },
+})
 if err != nil { ... }
 defer client.Close()
 ```
 
-`ClusterClient` round-robins initial requests across the provided addresses, then caches the `x-rune-owner` response header so subsequent requests for the same key go directly to the owning node. The `Set`/`Get`/`Delete` interface is identical to the single-node client.
+`ClusterClient` round-robins initial requests across the provided addresses, then caches the `x-rune-owner` response header so subsequent requests for the same key go directly to the owning node. If a request to a cached node fails (e.g. the node left the cluster), the hint is evicted and the next request re-routes automatically. The `Set`/`Get`/`Delete` interface is identical to the single-node client.
 
 ### Using the client
 

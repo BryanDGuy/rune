@@ -93,6 +93,8 @@ Rune stores a **single copy** of each key, on its owning node — there are no r
 1. Same routing as write — cached owner if known, otherwise round-robin
 2. On a cache miss from the owning node, the SDK surfaces `ErrNotFound` and the caller fetches from source
 
+**Hint eviction:** If an RPC to a cached node fails for any reason other than `ErrNotFound` (e.g. the node left the cluster), the SDK evicts the cached hint for that key. The next request re-routes via round-robin, picks up a fresh `x-rune-owner` from the new owner, and re-caches it. No manual intervention required.
+
 **Owner placement** is computed, not stored. Given a key and the current hash ring, the owner is the first node clockwise from the key's hash position. Any node — and the SDK itself — can compute it from just the key and the ring. No per-key tracking in etcd is needed.
 
 **Direct (non-SDK) clients:** Because the proto is language-agnostic, clients can be generated in any language and call Rune without the cluster-aware SDK. Such a client may connect to any node; if that node does not own the requested key, it forwards the request to the owner and relays the response back, so results are correct regardless of entry point — at the cost of one extra hop. To let thin clients route directly and skip that hop, every Get/Set response carries an `x-rune-owner` header set to the owning node's advertised address. A client caches `key → address` and connects to the owner itself next time, gaining owner-aware routing without watching etcd or reimplementing the ring. Stale hints self-correct: the entry node forwards again and returns an updated `x-rune-owner`. A loop marker (`x-rune-forwarded`) ensures a forwarded request is served locally and never re-forwarded.
