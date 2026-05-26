@@ -47,7 +47,7 @@ func main() {
 
 func run() error {
 	addrs := strings.Split(*nodesFlag, ",")
-	client, err := runesdk.NewClusterClient(addrs...)
+	client, err := runesdk.NewClusterClient(addrs, nil)
 	if err != nil {
 		return fmt.Errorf("cluster client: %w", err)
 	}

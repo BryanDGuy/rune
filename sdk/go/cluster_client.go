@@ -20,10 +20,18 @@ import (
 
 var errClusterClientClosed = errors.New("cluster: ClusterClient is closed")
 
+// ClusterOptions configures a ClusterClient. A nil pointer uses production defaults.
+type ClusterOptions struct {
+	// Dial opens a connection to a node address not yet known to the client.
+	// If nil, an insecure gRPC connection is used.
+	Dial func(addr string) (*Client, error)
+}
+
 // ClusterClient routes Get/Set to Rune nodes using the x-rune-owner hint returned
 // in every response header. The first request for a key takes at most one
 // server-side forwarding hop; the hint is then cached so subsequent requests go
-// directly to the owning node.
+// directly to the owning node. If a request fails (e.g. the owning node left the
+// cluster), the cached hint is evicted so the next attempt re-routes correctly.
 type ClusterClient struct {
 	cache   map[string]string  // key → owner addr (populated from x-rune-owner)
 	clients map[string]*Client // addr → open connection (lazy-dialed)
@@ -42,36 +50,23 @@ func defaultDial(addr string) (*Client, error) {
 	return NewClient(conn), nil
 }
 
-// NewClusterClient creates a ClusterClient that distributes initial requests
-// across addrs and caches owner hints for subsequent requests. At least one
-// address is required.
-func NewClusterClient(addrs ...string) (*ClusterClient, error) {
+// NewClusterClient creates a ClusterClient that distributes initial requests across
+// addrs and caches owner hints for subsequent requests. At least one address is
+// required. Pass opts.Dial to control how connections to new node addresses are
+// opened; if nil, an insecure gRPC dialer is used.
+func NewClusterClient(addrs []string, opts *ClusterOptions) (*ClusterClient, error) {
 	if len(addrs) == 0 {
 		return nil, errors.New("cluster: at least one node address required")
+	}
+	dial := defaultDial
+	if opts != nil && opts.Dial != nil {
+		dial = opts.Dial
 	}
 	return &ClusterClient{
 		addrs:   addrs,
 		cache:   make(map[string]string),
 		clients: make(map[string]*Client),
-		dialFn:  defaultDial,
-	}, nil
-}
-
-// NewClusterClientFromClients creates a ClusterClient with pre-dialed connections.
-// addrs controls which addresses receive uncached-key requests; clients holds all
-// connections the client may use, including those learned from x-rune-owner hints.
-// Intended for testing.
-func NewClusterClientFromClients(addrs []string, clients map[string]*Client) (*ClusterClient, error) {
-	if len(addrs) == 0 {
-		return nil, errors.New("cluster: at least one node address required")
-	}
-	if clients == nil {
-		clients = make(map[string]*Client)
-	}
-	return &ClusterClient{
-		addrs:   addrs,
-		cache:   make(map[string]string),
-		clients: clients,
+		dialFn:  dial,
 	}, nil
 }
 
@@ -108,9 +103,6 @@ func (c *ClusterClient) connFor(addr string) (*Client, error) {
 	}
 	if client, ok = c.clients[addr]; ok {
 		return client, nil
-	}
-	if c.dialFn == nil {
-		return nil, fmt.Errorf("cluster: no pre-dialed client for %s", addr)
 	}
 	client, err := c.dialFn(addr)
 	if err != nil {
@@ -149,6 +141,16 @@ func (c *ClusterClient) cacheHint(key string, md metadata.MD) {
 	c.mu.Unlock()
 }
 
+// evictHint removes the cached owner for key. Called when an RPC to the cached
+// node fails so the next request re-routes to a live node.
+func (c *ClusterClient) evictHint(key string) {
+	c.mu.Lock()
+	if !c.closed {
+		delete(c.cache, key)
+	}
+	c.mu.Unlock()
+}
+
 func (c *ClusterClient) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	client, err := c.clientFor(key)
 	if err != nil {
@@ -156,6 +158,9 @@ func (c *ClusterClient) Get(ctx context.Context, key string) (io.ReadCloser, err
 	}
 	rc, md, err := clusterGet(ctx, client, key)
 	if err != nil {
+		if !errors.Is(err, ErrNotFound) {
+			c.evictHint(key)
+		}
 		return nil, err
 	}
 	c.cacheHint(key, md)
@@ -169,6 +174,9 @@ func (c *ClusterClient) Set(ctx context.Context, key string, r io.Reader, opts *
 	}
 	md, err := clusterSet(ctx, client, key, r, opts)
 	if err != nil {
+		if !errors.Is(err, ErrNotFound) {
+			c.evictHint(key)
+		}
 		return err
 	}
 	c.cacheHint(key, md)
@@ -198,6 +206,9 @@ func (c *ClusterClient) Delete(ctx context.Context, keys ...string) error {
 			return err
 		}
 		if err := client.Delete(ctx, addrKeys...); err != nil {
+			for _, key := range addrKeys {
+				c.evictHint(key)
+			}
 			return err
 		}
 	}

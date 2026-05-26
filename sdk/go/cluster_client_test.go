@@ -3,6 +3,7 @@ package runesdk_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"testing"
 
@@ -12,13 +13,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// dialFrom returns a Dial function that resolves addresses from a fixed map of
+// pre-built clients. Used to inject in-process connections in tests.
+func dialFrom(clients map[string]*runesdk.Client) func(string) (*runesdk.Client, error) {
+	return func(addr string) (*runesdk.Client, error) {
+		if c, ok := clients[addr]; ok {
+			return c, nil
+		}
+		return nil, fmt.Errorf("no pre-dialed client for %s", addr)
+	}
+}
+
 func TestClusterClientBasicSetGet(t *testing.T) {
 	conn, stop := testutil.NewBufconnConn(t, 1<<20)
 	defer stop()
 
-	c, err := runesdk.NewClusterClientFromClients(
+	c, err := runesdk.NewClusterClient(
 		[]string{conn.Target()},
-		map[string]*runesdk.Client{conn.Target(): runesdk.NewClient(conn)},
+		&runesdk.ClusterOptions{Dial: dialFrom(map[string]*runesdk.Client{
+			conn.Target(): runesdk.NewClient(conn),
+		})},
 	)
 	require.NoError(t, err)
 	defer c.Close()
@@ -52,7 +66,10 @@ func TestClusterClientCachesOwnerHint(t *testing.T) {
 	}
 	// Only the proxy is in the initial addr list; the real node's addr will be
 	// learned from x-rune-owner and cached.
-	c, err := runesdk.NewClusterClientFromClients([]string{proxyConn.Target()}, clients)
+	c, err := runesdk.NewClusterClient(
+		[]string{proxyConn.Target()},
+		&runesdk.ClusterOptions{Dial: dialFrom(clients)},
+	)
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -84,9 +101,11 @@ func TestClusterClientDelete(t *testing.T) {
 	conn, stop := testutil.NewBufconnConn(t, 1<<20)
 	defer stop()
 
-	c, err := runesdk.NewClusterClientFromClients(
+	c, err := runesdk.NewClusterClient(
 		[]string{conn.Target()},
-		map[string]*runesdk.Client{conn.Target(): runesdk.NewClient(conn)},
+		&runesdk.ClusterOptions{Dial: dialFrom(map[string]*runesdk.Client{
+			conn.Target(): runesdk.NewClient(conn),
+		})},
 	)
 	require.NoError(t, err)
 	defer c.Close()
@@ -103,19 +122,20 @@ func TestClusterClientGetNotFound(t *testing.T) {
 	conn, stop := testutil.NewBufconnConn(t, 1<<20)
 	defer stop()
 
-	c, err := runesdk.NewClusterClientFromClients(
+	c, err := runesdk.NewClusterClient(
 		[]string{conn.Target()},
-		map[string]*runesdk.Client{conn.Target(): runesdk.NewClient(conn)},
+		&runesdk.ClusterOptions{Dial: dialFrom(map[string]*runesdk.Client{
+			conn.Target(): runesdk.NewClient(conn),
+		})},
 	)
 	require.NoError(t, err)
-	defer c.Close()
 
 	_, err = c.Get(context.Background(), "missing")
 	require.ErrorIs(t, err, runesdk.ErrNotFound)
 }
 
 func TestClusterClientNoAddrsError(t *testing.T) {
-	_, err := runesdk.NewClusterClient()
+	_, err := runesdk.NewClusterClient(nil, nil)
 	require.Error(t, err)
 }
 
@@ -123,9 +143,11 @@ func TestClusterClientCloseStopsRouting(t *testing.T) {
 	conn, stop := testutil.NewBufconnConn(t, 1<<20)
 	defer stop()
 
-	c, err := runesdk.NewClusterClientFromClients(
+	c, err := runesdk.NewClusterClient(
 		[]string{conn.Target()},
-		map[string]*runesdk.Client{conn.Target(): runesdk.NewClient(conn)},
+		&runesdk.ClusterOptions{Dial: dialFrom(map[string]*runesdk.Client{
+			conn.Target(): runesdk.NewClient(conn),
+		})},
 	)
 	require.NoError(t, err)
 	require.NoError(t, c.Close())
