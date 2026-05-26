@@ -28,13 +28,11 @@ func NewClient(conn *grpc.ClientConn) *Client {
 
 // Chunked via client-streaming gRPC in 1MB pieces.
 func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts *SetOptions) error {
-	return c.setWithHint(ctx, key, r, opts, nil)
+	_, err := c.set(ctx, key, r, opts)
+	return err
 }
 
-// setWithHint is Set with optional response-header capture. If md is non-nil,
-// it is populated with the server's initial metadata (including x-rune-owner)
-// after the RPC completes.
-func (c *Client) setWithHint(ctx context.Context, key string, r io.Reader, opts *SetOptions, md *metadata.MD) error {
+func (c *Client) set(ctx context.Context, key string, r io.Reader, opts *SetOptions) (metadata.MD, error) {
 	var ttl time.Duration
 	var callOpts []grpc.CallOption
 	if opts != nil {
@@ -46,7 +44,7 @@ func (c *Client) setWithHint(ctx context.Context, key string, r io.Reader, opts 
 
 	stream, err := c.grpc.Set(ctx, callOpts...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if err = stream.Send(&runev1.SetRequest{
@@ -57,7 +55,7 @@ func (c *Client) setWithHint(ctx context.Context, key string, r io.Reader, opts 
 			},
 		},
 	}); err != nil {
-		return err
+		return nil, err
 	}
 
 	buf := make([]byte, chunkSize)
@@ -67,66 +65,60 @@ func (c *Client) setWithHint(ctx context.Context, key string, r io.Reader, opts 
 			if err = stream.Send(&runev1.SetRequest{
 				Payload: &runev1.SetRequest_Chunk{Chunk: buf[:n]},
 			}); err != nil {
-				return err
+				return nil, err
 			}
 		}
 		if errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF) {
 			break
 		}
 		if readErr != nil {
-			return readErr
+			return nil, readErr
 		}
 	}
 
 	if _, err = stream.CloseAndRecv(); err != nil {
-		return err
+		return nil, err
 	}
-	if md != nil {
-		*md, _ = stream.Header()
-	}
-	return nil
+	md, _ := stream.Header()
+	return md, nil
 }
 
 // Caller must Close() the reader when done. Returns ErrNotFound if key is missing.
 func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
-	return c.getWithHint(ctx, key, nil)
+	rc, _, err := c.get(ctx, key)
+	return rc, err
 }
 
-// getWithHint is Get with optional response-header capture. If md is non-nil,
-// it is populated with the server's initial metadata (including x-rune-owner)
-// before this function returns.
-func (c *Client) getWithHint(ctx context.Context, key string, md *metadata.MD) (io.ReadCloser, error) {
+func (c *Client) get(ctx context.Context, key string) (io.ReadCloser, metadata.MD, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	stream, err := c.grpc.Get(ctx, &runev1.GetRequest{Key: key})
 	if err != nil {
 		cancel()
 		if status.Code(err) == codes.NotFound {
-			return nil, ErrNotFound
+			return nil, nil, ErrNotFound
 		}
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Block until the server sends its initial metadata frame, which always
 	// precedes any data frames in HTTP/2. For forwarded requests this includes
 	// x-rune-owner; for single-node requests the header is empty.
-	if md != nil {
-		*md, _ = stream.Header()
-	}
+	md, _ := stream.Header()
 
 	// Eagerly probe the first message so we can surface NotFound immediately.
 	resp, err := stream.Recv()
 	if err != nil {
 		cancel()
 		if errors.Is(err, io.EOF) {
-			return io.NopCloser(bytes.NewReader(nil)), nil
+			return io.NopCloser(bytes.NewReader(nil)), md, nil
 		}
 		if status.Code(err) == codes.NotFound {
-			return nil, ErrNotFound
+			return nil, nil, ErrNotFound
 		}
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &streamReader{stream: stream, buf: resp.Chunk, cancel: cancel}, nil
+	return &streamReader{stream: stream, buf: resp.Chunk, cancel: cancel}, md, nil
 }
 
 func (c *Client) Delete(ctx context.Context, keys ...string) error {

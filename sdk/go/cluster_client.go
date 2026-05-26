@@ -153,8 +153,7 @@ func (c *ClusterClient) Get(ctx context.Context, key string) (io.ReadCloser, err
 	if err != nil {
 		return nil, err
 	}
-	var md metadata.MD
-	rc, err := client.getWithHint(ctx, key, &md)
+	rc, md, err := client.get(ctx, key)
 	if err != nil {
 		if c.isClosed() {
 			return nil, errClusterClientClosed
@@ -170,8 +169,8 @@ func (c *ClusterClient) Set(ctx context.Context, key string, r io.Reader, opts *
 	if err != nil {
 		return err
 	}
-	var md metadata.MD
-	if err := client.setWithHint(ctx, key, r, opts, &md); err != nil {
+	md, err := client.set(ctx, key, r, opts)
+	if err != nil {
 		if c.isClosed() {
 			return errClusterClientClosed
 		}
