@@ -21,7 +21,7 @@ var errClusterClientClosed = errors.New("cluster: ClusterClient is closed")
 // ClusterOptions configures a ClusterClient. A nil pointer uses production defaults.
 type ClusterOptions struct {
 	// Dial opens a connection to a node address not yet known to the client.
-	// If nil, an insecure gRPC connection is used.
+	// Required — NewClusterClient returns an error if nil.
 	Dial func(addr string) (*Client, error)
 }
 
