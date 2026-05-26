@@ -15,7 +15,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-// fakeStore is an in-memory implementation of memberStore for unit tests.
+// fakeStore is an in-memory implementation of etcdClient for unit tests.
 type fakeStore struct {
 	kvs    map[string]string
 	watchC chan clientv3.WatchResponse

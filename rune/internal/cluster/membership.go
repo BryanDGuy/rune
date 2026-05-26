@@ -19,9 +19,9 @@ const (
 	reregisterBackoff = time.Second
 )
 
-// memberStore is the subset of clientv3.Client methods used by Membership.
-// *clientv3.Client satisfies this interface; tests use a fake.
-type memberStore interface {
+// etcdClient is the subset of *clientv3.Client methods used by Membership.
+// Tests inject a fake.
+type etcdClient interface {
 	Put(ctx context.Context, key, val string, opts ...clientv3.OpOption) (*clientv3.PutResponse, error)
 	Get(ctx context.Context, key string, opts ...clientv3.OpOption) (*clientv3.GetResponse, error)
 	Watch(ctx context.Context, key string, opts ...clientv3.OpOption) clientv3.WatchChan
@@ -41,7 +41,7 @@ type MembershipIface interface {
 // If nodeAddr is non-empty, it also registers this node in etcd (server mode).
 // If nodeAddr is empty, it only watches (client mode).
 type Membership struct {
-	store    memberStore
+	store    etcdClient
 	ring     *router.Router
 	cancel   context.CancelFunc
 	logger   *logging.Logger
@@ -52,7 +52,7 @@ type Membership struct {
 }
 
 // New builds a Membership. A nil logger discards all log output.
-func New(store memberStore, nodeID, nodeAddr string, logger *logging.Logger) *Membership {
+func New(store etcdClient, nodeID, nodeAddr string, logger *logging.Logger) *Membership {
 	if logger == nil {
 		logger = logging.Discard()
 	}
