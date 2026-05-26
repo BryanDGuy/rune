@@ -1,16 +1,21 @@
 package runesdk
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
+	"time"
 
+	runev1 "github.com/bryandguy/rune/shared/gen/rune/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 var errClusterClientClosed = errors.New("cluster: ClusterClient is closed")
@@ -149,7 +154,7 @@ func (c *ClusterClient) Get(ctx context.Context, key string) (io.ReadCloser, err
 	if err != nil {
 		return nil, err
 	}
-	rc, md, err := client.get(ctx, key)
+	rc, md, err := clusterGet(ctx, client, key)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +167,7 @@ func (c *ClusterClient) Set(ctx context.Context, key string, r io.Reader, opts *
 	if err != nil {
 		return err
 	}
-	md, err := client.set(ctx, key, r, opts)
+	md, err := clusterSet(ctx, client, key, r, opts)
 	if err != nil {
 		return err
 	}
@@ -212,4 +217,87 @@ func (c *ClusterClient) Close() error {
 	c.clients = nil
 	c.cache = nil
 	return nil
+}
+
+// clusterGet streams a Get RPC and returns the x-rune-owner header for routing.
+func clusterGet(ctx context.Context, c *Client, key string) (io.ReadCloser, metadata.MD, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	stream, err := c.grpc.Get(ctx, &runev1.GetRequest{Key: key})
+	if err != nil {
+		cancel()
+		if status.Code(err) == codes.NotFound {
+			return nil, nil, ErrNotFound
+		}
+		return nil, nil, err
+	}
+
+	// Block until the server sends its initial metadata frame so x-rune-owner
+	// is available before we return the reader to the caller.
+	md, _ := stream.Header()
+
+	resp, err := stream.Recv()
+	if err != nil {
+		cancel()
+		if errors.Is(err, io.EOF) {
+			return io.NopCloser(bytes.NewReader(nil)), md, nil
+		}
+		if status.Code(err) == codes.NotFound {
+			return nil, nil, ErrNotFound
+		}
+		return nil, nil, err
+	}
+
+	return &streamReader{stream: stream, buf: resp.Chunk, cancel: cancel}, md, nil
+}
+
+// clusterSet streams a Set RPC and returns the x-rune-owner header for routing.
+func clusterSet(ctx context.Context, c *Client, key string, r io.Reader, opts *SetOptions) (metadata.MD, error) {
+	var ttl time.Duration
+	var callOpts []grpc.CallOption
+	if opts != nil {
+		ttl = opts.TTL
+		if opts.Compress {
+			callOpts = append(callOpts, grpc.UseCompressor("gzip"))
+		}
+	}
+
+	stream, err := c.grpc.Set(ctx, callOpts...)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = stream.Send(&runev1.SetRequest{
+		Payload: &runev1.SetRequest_Header{
+			Header: &runev1.SetHeader{
+				Key:        key,
+				TtlSeconds: int64(ttl.Seconds()),
+			},
+		},
+	}); err != nil {
+		return nil, err
+	}
+
+	buf := make([]byte, chunkSize)
+	for {
+		n, readErr := io.ReadFull(r, buf)
+		if n > 0 {
+			if err = stream.Send(&runev1.SetRequest{
+				Payload: &runev1.SetRequest_Chunk{Chunk: buf[:n]},
+			}); err != nil {
+				return nil, err
+			}
+		}
+		if errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF) {
+			break
+		}
+		if readErr != nil {
+			return nil, readErr
+		}
+	}
+
+	if _, err = stream.CloseAndRecv(); err != nil {
+		return nil, err
+	}
+	md, _ := stream.Header()
+	return md, nil
 }

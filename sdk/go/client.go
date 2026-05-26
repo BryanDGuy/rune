@@ -11,7 +11,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	_ "google.golang.org/grpc/encoding/gzip" // registers gzip compressor for SetOptions.Compress
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -28,11 +27,6 @@ func NewClient(conn *grpc.ClientConn) *Client {
 
 // Chunked via client-streaming gRPC in 1MB pieces.
 func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts *SetOptions) error {
-	_, err := c.set(ctx, key, r, opts)
-	return err
-}
-
-func (c *Client) set(ctx context.Context, key string, r io.Reader, opts *SetOptions) (metadata.MD, error) {
 	var ttl time.Duration
 	var callOpts []grpc.CallOption
 	if opts != nil {
@@ -44,7 +38,7 @@ func (c *Client) set(ctx context.Context, key string, r io.Reader, opts *SetOpti
 
 	stream, err := c.grpc.Set(ctx, callOpts...)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if err = stream.Send(&runev1.SetRequest{
@@ -55,7 +49,7 @@ func (c *Client) set(ctx context.Context, key string, r io.Reader, opts *SetOpti
 			},
 		},
 	}); err != nil {
-		return nil, err
+		return err
 	}
 
 	buf := make([]byte, chunkSize)
@@ -65,60 +59,46 @@ func (c *Client) set(ctx context.Context, key string, r io.Reader, opts *SetOpti
 			if err = stream.Send(&runev1.SetRequest{
 				Payload: &runev1.SetRequest_Chunk{Chunk: buf[:n]},
 			}); err != nil {
-				return nil, err
+				return err
 			}
 		}
 		if errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF) {
 			break
 		}
 		if readErr != nil {
-			return nil, readErr
+			return readErr
 		}
 	}
 
-	if _, err = stream.CloseAndRecv(); err != nil {
-		return nil, err
-	}
-	md, _ := stream.Header()
-	return md, nil
+	_, err = stream.CloseAndRecv()
+	return err
 }
 
 // Caller must Close() the reader when done. Returns ErrNotFound if key is missing.
 func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
-	rc, _, err := c.get(ctx, key)
-	return rc, err
-}
-
-func (c *Client) get(ctx context.Context, key string) (io.ReadCloser, metadata.MD, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	stream, err := c.grpc.Get(ctx, &runev1.GetRequest{Key: key})
 	if err != nil {
 		cancel()
 		if status.Code(err) == codes.NotFound {
-			return nil, nil, ErrNotFound
+			return nil, ErrNotFound
 		}
-		return nil, nil, err
+		return nil, err
 	}
 
-	// Block until the server sends its initial metadata frame, which always
-	// precedes any data frames in HTTP/2. For forwarded requests this includes
-	// x-rune-owner; for single-node requests the header is empty.
-	md, _ := stream.Header()
-
-	// Eagerly probe the first message so we can surface NotFound immediately.
 	resp, err := stream.Recv()
 	if err != nil {
 		cancel()
 		if errors.Is(err, io.EOF) {
-			return io.NopCloser(bytes.NewReader(nil)), md, nil
+			return io.NopCloser(bytes.NewReader(nil)), nil
 		}
 		if status.Code(err) == codes.NotFound {
-			return nil, nil, ErrNotFound
+			return nil, ErrNotFound
 		}
-		return nil, nil, err
+		return nil, err
 	}
 
-	return &streamReader{stream: stream, buf: resp.Chunk, cancel: cancel}, md, nil
+	return &streamReader{stream: stream, buf: resp.Chunk, cancel: cancel}, nil
 }
 
 func (c *Client) Delete(ctx context.Context, keys ...string) error {
