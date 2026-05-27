@@ -18,14 +18,16 @@ build:
 
 proto:
 	protoc \
-		--go_out=rune/internal/gen \
+		--go_out=shared/gen \
 		--go_opt=paths=source_relative \
-		--go-grpc_out=rune/internal/gen \
+		--go-grpc_out=shared/gen \
 		--go-grpc_opt=paths=source_relative \
 		--proto_path=shared/proto \
 		rune/v1/rune.proto
-	cp rune/internal/gen/rune/v1/rune.pb.go sdk/go/internal/gen/rune/v1/rune.pb.go
-	cp rune/internal/gen/rune/v1/rune_grpc.pb.go sdk/go/internal/gen/rune/v1/rune_grpc.pb.go
+	cp shared/gen/rune/v1/rune.pb.go rune/internal/gen/rune/v1/rune.pb.go
+	cp shared/gen/rune/v1/rune_grpc.pb.go rune/internal/gen/rune/v1/rune_grpc.pb.go
+	cp shared/gen/rune/v1/rune.pb.go sdk/go/internal/gen/rune/v1/rune.pb.go
+	cp shared/gen/rune/v1/rune_grpc.pb.go sdk/go/internal/gen/rune/v1/rune_grpc.pb.go
 
 tidy:
 	go mod tidy -C rune
