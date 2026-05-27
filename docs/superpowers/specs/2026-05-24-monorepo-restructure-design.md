@@ -5,7 +5,7 @@
 
 ## Goal
 
-Restructure the repo into a monorepo with clear ownership boundaries: `rune/` for the server binary, `sdk/` for client SDKs, and `shared/` for the proto source. Each Go component has its own `go.mod` so they can be versioned and tagged independently; a root `go.work` stitches them together for local development.
+Restructure the repo into a monorepo with clear ownership boundaries: `rune/` for the server binary, `sdk/` for client SDKs, and `api/` for the proto source. Each Go component has its own `go.mod` so they can be versioned and tagged independently; a root `go.work` stitches them together for local development.
 
 ## Directory Layout
 
@@ -30,7 +30,7 @@ rune/                        ← repo root
 │   ├── internal/
 │   │   ├── cluster/         ← server membership + peer dialer (etcd registration, keepalive)
 │   │   ├── config/
-│   │   ├── gen/rune/v1/     ← generated proto types (copied from shared/gen by make proto)
+│   │   ├── gen/rune/v1/     ← generated proto types (copied from api/gen by make proto)
 │   │   ├── logging/         ← server logging surface
 │   │   ├── router/          ← consistent hash ring; Node type is the etcd wire format
 │   │   ├── server/
@@ -45,18 +45,18 @@ rune/                        ← repo root
 │   └── go/                  (module: github.com/bryandguy/rune/sdk/go)
 │       ├── go.mod
 │       ├── go.sum
-│       └── internal/gen/rune/v1/  ← generated proto types (copied from shared/gen by make proto)
+│       └── internal/gen/rune/v1/  ← generated proto types (copied from api/gen by make proto)
 │
-└── shared/                  ← not a Go module; proto source and canonical generated output only
+└── api/                  ← not a Go module; proto source and canonical generated output only
     ├── gen/rune/v1/         ← canonical generated output; make proto writes here first
     └── proto/rune/v1/       ← .proto source definitions (single source of truth)
 ```
 
 `bin/` (build output) stays at root and is not moved.
 
-**Why no shared Go module:** Publishing a third Go module (`shared`) as a prerequisite for both `rune` and `sdk/go` adds release coordination overhead for what is just generated code. Instead, `make proto` generates into `shared/gen/` then copies to `rune/internal/gen/` and `sdk/go/internal/gen/`. The duplication is intentional — each module is fully self-contained with no cross-module `replace` directives.
+**Why no shared Go module:** Publishing a third Go module as a prerequisite for both `rune` and `sdk/go` adds release coordination overhead for what is just generated code. Instead, `make proto` generates into `api/gen/` then copies to `rune/internal/gen/` and `sdk/go/internal/gen/`. The duplication is intentional — each module is fully self-contained with no cross-module `replace` directives.
 
-**What belongs in shared/:** Only the gRPC wire format — the `.proto` source and the canonical generated output. No hand-written Go logic lives there.
+**What belongs in api/:** Only the gRPC wire format — the `.proto` source and the canonical generated output. No hand-written Go logic lives there.
 
 **What belongs in rune/internal/:** Server implementation details — node registration, lease keepalive, peer dialing, consistent hash ring, logging. None of this is relevant to SDK consumers.
 
@@ -89,7 +89,7 @@ The `sdk/go` package path (`github.com/bryandguy/rune/sdk/go`) is unchanged.
 |--------|--------|
 | `build` | `./cmd/rune` → `./rune/cmd/rune` |
 | `bench` | `./cmd/bench/` → `./rune/cmd/bench/` |
-| `proto` | generates into `shared/gen/`, then copies to `rune/internal/gen/` and `sdk/go/internal/gen/` |
+| `proto` | generates into `api/gen/`, then copies to `rune/internal/gen/` and `sdk/go/internal/gen/` |
 | `test` | alias for `test-rune test-sdk` |
 | `test-rune` | server tests, excluding integration |
 | `test-sdk` | `./sdk/go/...` |
