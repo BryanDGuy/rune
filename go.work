@@ -3,5 +3,4 @@ go 1.26
 use (
 	./rune
 	./sdk/go
-	./shared
 )

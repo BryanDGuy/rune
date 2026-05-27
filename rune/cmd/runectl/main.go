@@ -21,8 +21,8 @@ import (
 	"io"
 	"os"
 
+	runev1 "github.com/bryandguy/rune/rune/internal/gen/rune/v1"
 	runesdk "github.com/bryandguy/rune/sdk/go"
-	runev1 "github.com/bryandguy/rune/shared/gen/rune/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

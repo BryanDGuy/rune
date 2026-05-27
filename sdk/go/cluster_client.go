@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	runev1 "github.com/bryandguy/rune/shared/gen/rune/v1"
+	runev1 "github.com/bryandguy/rune/sdk/go/internal/gen/rune/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"

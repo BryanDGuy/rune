@@ -7,7 +7,6 @@ import (
 	"io"
 	"testing"
 
-	"github.com/bryandguy/rune/rune/test/testutil"
 	runesdk "github.com/bryandguy/rune/sdk/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,7 +24,7 @@ func dialFrom(clients map[string]*runesdk.Client) func(string) (*runesdk.Client,
 }
 
 func TestClusterClientBasicSetGet(t *testing.T) {
-	conn, stop := testutil.NewBufconnConn(t, 1<<20, nil)
+	conn, stop := NewBufconnConn(t, 1<<20, nil)
 	defer stop()
 
 	c, err := runesdk.NewClusterClient(
@@ -54,11 +53,11 @@ func TestClusterClientBasicSetGet(t *testing.T) {
 // is cached so that after the first Get, subsequent requests bypass the proxy and
 // go directly to the owning node.
 func TestClusterClientCachesOwnerHint(t *testing.T) {
-	realConn, stopReal := testutil.NewBufconnConn(t, 1<<20, nil)
+	realConn, stopReal := NewBufconnConn(t, 1<<20, nil)
 	defer stopReal()
 
 	// proxyConn forwards every key to realConn (ring contains only the peer).
-	proxyConn, stopProxy := testutil.NewBufconnConn(t, 1<<20, &testutil.BufconnOptions{ForwardTo: realConn})
+	proxyConn, stopProxy := NewBufconnConn(t, 1<<20, &BufconnOptions{ForwardTo: realConn})
 
 	clients := map[string]*runesdk.Client{
 		proxyConn.Target(): runesdk.NewClient(proxyConn),
@@ -98,7 +97,7 @@ func TestClusterClientCachesOwnerHint(t *testing.T) {
 }
 
 func TestClusterClientDelete(t *testing.T) {
-	conn, stop := testutil.NewBufconnConn(t, 1<<20, nil)
+	conn, stop := NewBufconnConn(t, 1<<20, nil)
 	defer stop()
 
 	c, err := runesdk.NewClusterClient(
@@ -119,7 +118,7 @@ func TestClusterClientDelete(t *testing.T) {
 }
 
 func TestClusterClientGetNotFound(t *testing.T) {
-	conn, stop := testutil.NewBufconnConn(t, 1<<20, nil)
+	conn, stop := NewBufconnConn(t, 1<<20, nil)
 	defer stop()
 
 	c, err := runesdk.NewClusterClient(
@@ -140,7 +139,7 @@ func TestClusterClientNoAddrsError(t *testing.T) {
 }
 
 func TestClusterClientCloseStopsRouting(t *testing.T) {
-	conn, stop := testutil.NewBufconnConn(t, 1<<20, nil)
+	conn, stop := NewBufconnConn(t, 1<<20, nil)
 	defer stop()
 
 	c, err := runesdk.NewClusterClient(
