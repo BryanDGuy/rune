@@ -1,4 +1,4 @@
-package runesdk_test
+package testutil
 
 import (
 	"context"
@@ -62,7 +62,6 @@ func NewBufconnConn(t *testing.T, bufSize int, opts *BufconnOptions) (*grpc.Clie
 	}
 }
 
-// memServer is a minimal in-process implementation of RuneService for SDK tests.
 type memServer struct {
 	runev1.UnimplementedRuneServiceServer
 	store   map[string][]byte
