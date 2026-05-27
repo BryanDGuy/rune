@@ -5,13 +5,13 @@
 
 ## Goal
 
-Restructure the repo into a monorepo with clear ownership boundaries: `rune/` for the server binary, `sdk/` for client SDKs, and `shared/` for code consumed by both. Each component has its own `go.mod` so they can be versioned and tagged independently; a root `go.work` stitches them together for local development.
+Restructure the repo into a monorepo with clear ownership boundaries: `rune/` for the server binary, `sdk/` for client SDKs, and `shared/` for the proto source. Each Go component has its own `go.mod` so they can be versioned and tagged independently; a root `go.work` stitches them together for local development.
 
 ## Directory Layout
 
 ```
 rune/                        ← repo root
-├── go.work                  (workspace: uses rune/, sdk/go/, shared/)
+├── go.work                  (workspace: uses rune/, sdk/go/)
 ├── go.work.sum
 ├── Makefile
 ├── LICENSE
@@ -30,6 +30,7 @@ rune/                        ← repo root
 │   ├── internal/
 │   │   ├── cluster/         ← server membership + peer dialer (etcd registration, keepalive)
 │   │   ├── config/
+│   │   ├── gen/rune/v1/     ← generated proto types (copied from shared/gen by make proto)
 │   │   ├── logging/         ← server logging surface
 │   │   ├── router/          ← consistent hash ring; Node type is the etcd wire format
 │   │   ├── server/
@@ -43,24 +44,25 @@ rune/                        ← repo root
 ├── sdk/
 │   └── go/                  (module: github.com/bryandguy/rune/sdk/go)
 │       ├── go.mod
-│       └── go.sum
+│       ├── go.sum
+│       └── internal/gen/rune/v1/  ← generated proto types (copied from shared/gen by make proto)
 │
-└── shared/                  (module: github.com/bryandguy/rune/shared)
-    ├── go.mod
-    ├── go.sum
-    ├── gen/rune/v1/         ← generated proto types
-    └── proto/rune/v1/       ← .proto source definitions
+└── shared/                  ← not a Go module; proto source and canonical generated output only
+    ├── gen/rune/v1/         ← canonical generated output; make proto writes here first
+    └── proto/rune/v1/       ← .proto source definitions (single source of truth)
 ```
 
 `bin/` (build output) stays at root and is not moved.
 
-**What belongs in shared/:** Only the gRPC wire format — the generated proto types and the `.proto` source. `shared/` is a proto-only module; no hand-written Go logic lives there.
+**Why no shared Go module:** Publishing a third Go module (`shared`) as a prerequisite for both `rune` and `sdk/go` adds release coordination overhead for what is just generated code. Instead, `make proto` generates into `shared/gen/` then copies to `rune/internal/gen/` and `sdk/go/internal/gen/`. The duplication is intentional — each module is fully self-contained with no cross-module `replace` directives.
+
+**What belongs in shared/:** Only the gRPC wire format — the `.proto` source and the canonical generated output. No hand-written Go logic lives there.
 
 **What belongs in rune/internal/:** Server implementation details — node registration, lease keepalive, peer dialing, consistent hash ring, logging. None of this is relevant to SDK consumers.
 
 **SDK routing:** The SDK's `ClusterClient` does not watch etcd or maintain a hash ring. It accepts a list of node addresses at construction time, round-robins uncached keys across them, and caches the owning node's address from the `x-rune-owner` response header. This keeps the SDK free of etcd and ring-algorithm dependencies.
 
-`testutil` lives at `rune/test/testutil/` because it imports server internals (`config`, `server`, `storage`). Being outside any `internal/` directory, SDK tests can still import it.
+`testutil` lives at `rune/test/testutil/` for server-integration tests. The SDK has its own minimal in-process `memServer` in `sdk/go/testutil_test.go` so it carries no `rune` module dependency.
 
 ## Import Path Changes
 
@@ -74,10 +76,10 @@ All files importing the packages below must be updated.
 | `github.com/bryandguy/rune/internal/config` | `github.com/bryandguy/rune/rune/internal/config` |
 | `github.com/bryandguy/rune/internal/server` | `github.com/bryandguy/rune/rune/internal/server` |
 | `github.com/bryandguy/rune/internal/storage` | `github.com/bryandguy/rune/rune/internal/storage` |
-| `github.com/bryandguy/rune/gen/rune/v1` | `github.com/bryandguy/rune/shared/gen/rune/v1` |
+| `github.com/bryandguy/rune/gen/rune/v1` | `github.com/bryandguy/rune/rune/internal/gen/rune/v1` (server) or `github.com/bryandguy/rune/sdk/go/internal/gen/rune/v1` (SDK) |
 | `github.com/bryandguy/rune/test/testutil` | `github.com/bryandguy/rune/rune/test/testutil` |
 
-With multi-module, cross-component imports require `replace` directives in each `go.mod` pointing to the local path (e.g. `replace github.com/bryandguy/rune/shared => ../../shared`). The `go.work` workspace handles resolution automatically for `go build` and `go test` run from the repo root, but `go mod tidy -C <dir>` requires the replace directives to be present.
+Each module is self-contained — no `replace` directives are needed. The `go.work` workspace handles local resolution for development.
 
 The `sdk/go` package path (`github.com/bryandguy/rune/sdk/go`) is unchanged.
 
@@ -87,16 +89,15 @@ The `sdk/go` package path (`github.com/bryandguy/rune/sdk/go`) is unchanged.
 |--------|--------|
 | `build` | `./cmd/rune` → `./rune/cmd/rune` |
 | `bench` | `./cmd/bench/` → `./rune/cmd/bench/` |
-| `proto` | `--go_out=gen --proto_path=proto` → `--go_out=shared/gen --proto_path=shared/proto` |
-| `test` | now an alias for `test-rune test-sdk test-shared` |
+| `proto` | generates into `shared/gen/`, then copies to `rune/internal/gen/` and `sdk/go/internal/gen/` |
+| `test` | alias for `test-rune test-sdk` |
 | `test-rune` | server tests, excluding integration |
 | `test-sdk` | `./sdk/go/...` |
-| `test-shared` | `./shared/...` |
 | `test-integration` | `./rune/test/integration/...` |
-| `verify` | alias for `verify-rune verify-sdk verify-shared` |
+| `verify` | alias for `verify-rune verify-sdk` |
 | `verify-{module}` | runs `lint fmt-check vet modernize` for that module |
-| `lint/fmt/vet/modernize` | each has `-rune`, `-sdk`, `-shared` variants scoped to their directory |
-| `tidy` | runs `go mod tidy -C` for each module then `go work sync` |
+| `lint/fmt/vet/modernize` | each has `-rune` and `-sdk` variants scoped to their directory |
+| `tidy` | runs `go mod tidy -C` for `rune` and `sdk/go`, then `go work sync` |
 | `update-deps` | `cd <dir> && go get -u ./...` per module, then tidy + work sync |
 
 ## Release Pipeline
@@ -122,5 +123,5 @@ A second job in `publish.yml` cross-compiles the `rune` binary and uploads the a
 ## What Does Not Change
 
 - `sdk/go` import paths are unchanged
-- Versioning is currently still coupled: a single `v*` tag covers all modules (independent per-module tagging is future work)
+- Versioning is currently coupled: a single `v*` tag covers both modules; the Go module proxy additionally requires a `sdk/go/vX.Y.Z` tag for the SDK subdirectory module (future work: configure semantic-release to emit both tags)
 - `.github/` workflows stay at root (required by GitHub)
