@@ -7,7 +7,7 @@ import (
 	"io"
 	"time"
 
-	runev1 "github.com/bryandguy/rune/gen/rune/v1"
+	runev1 "github.com/bryandguy/rune/shared/gen/rune/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	_ "google.golang.org/grpc/encoding/gzip" // registers gzip compressor for SetOptions.Compress
@@ -86,7 +86,6 @@ func (c *Client) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 		return nil, err
 	}
 
-	// Eagerly probe the first message so we can surface NotFound immediately.
 	resp, err := stream.Recv()
 	if err != nil {
 		cancel()

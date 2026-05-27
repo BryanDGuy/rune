@@ -8,14 +8,14 @@ import (
 
 	runesdk "github.com/bryandguy/rune/sdk/go"
 
-	"github.com/bryandguy/rune/test/testutil"
+	"github.com/bryandguy/rune/rune/test/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func newTestSDKClient(t *testing.T) (*runesdk.Client, func()) {
 	t.Helper()
-	conn, cleanup := testutil.NewBufconnConn(t, 1<<20)
+	conn, cleanup := testutil.NewBufconnConn(t, 1<<20, nil)
 	return runesdk.NewClient(conn), cleanup
 }
 

@@ -38,7 +38,7 @@ Pods (Go SDK / direct gRPC)
                           └───────────┘
 ```
 
-Single-node mode requires no etcd — just run one node. In cluster mode, set `RUNE_ETCD_ENDPOINTS` and each node registers itself, watches for peers, and routes misrouted requests to the owning node. The SDK's `ClusterClient` watches etcd and routes directly to the owning node, skipping the server-side hop entirely. Each key lives on a single owning node; if that node goes down its keys become cache misses until refetched from source.
+Single-node mode requires no etcd — just run one node. In cluster mode, set `RUNE_ETCD_ENDPOINTS` and each node registers itself, watches for peers, and routes misrouted requests to the owning node. The SDK's `ClusterClient` caches the owning node's address from the `x-rune-owner` response header, routing subsequent requests directly and skipping the server-side forwarding hop. Each key lives on a single owning node; if that node goes down its keys become cache misses until refetched from source.
 
 ## Performance
 
@@ -59,7 +59,7 @@ To reproduce: `make cluster-up && make bench`
 
 ```bash
 # Build
-go build -o rune ./cmd/rune
+go build -o rune ./rune/cmd/rune
 
 # Run with defaults (port 7946, data in /var/rune/data)
 ./rune
@@ -85,24 +85,30 @@ client := runesdk.NewClient(conn)
 defer client.Close()
 ```
 
-### Connecting (cluster mode, requires etcd)
+### Connecting (cluster mode)
 
 ```go
 import (
     runesdk "github.com/bryandguy/rune/sdk/go"
-    clientv3 "go.etcd.io/etcd/client/v3"
+    "google.golang.org/grpc"
+    "google.golang.org/grpc/credentials/insecure"
 )
 
-etcdClient, err := clientv3.New(clientv3.Config{Endpoints: []string{"etcd:2379"}})
-if err != nil { ... }
-defer etcdClient.Close()
-
-client, err := runesdk.NewClusterClient(etcdClient, "")
+addrs := []string{"node-a:7946", "node-b:7946", "node-c:7946"}
+client, err := runesdk.NewClusterClient(addrs, &runesdk.ClusterOptions{
+    Dial: func(addr string) (*runesdk.Client, error) {
+        conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+        if err != nil {
+            return nil, err
+        }
+        return runesdk.NewClient(conn), nil
+    },
+})
 if err != nil { ... }
 defer client.Close()
 ```
 
-`ClusterClient` routes each key to its owning node automatically. The `Set`/`Get` interface is identical to the single-node client.
+`ClusterClient` round-robins initial requests across the provided addresses, then caches the `x-rune-owner` response header so subsequent requests for the same key go directly to the owning node. If a request to a cached node fails (e.g. the node left the cluster), the hint is evicted and the next request re-routes automatically. The `Set`/`Get`/`Delete` interface is identical to the single-node client.
 
 ### Using the client
 
@@ -131,7 +137,7 @@ io.Copy(dest, r) // streams chunk-by-chunk, never buffers the full value
 
 ## Direct gRPC access (non-Go clients)
 
-The Go SDK is the most convenient client, but Rune's interface is plain gRPC — any language can generate a client from [`proto/rune/v1/rune.proto`](proto/rune/v1/rune.proto) and call it directly.
+The Go SDK is the most convenient client, but Rune's interface is plain gRPC — any language can generate a client from [`shared/proto/rune/v1/rune.proto`](shared/proto/rune/v1/rune.proto) and call it directly.
 
 In cluster mode you can connect to **any** node: if it doesn't own the requested key, it forwards the request to the node that does and relays the response back. So a direct client always gets correct results without knowing the ring layout — at the cost of one extra hop for keys the entry node doesn't own.
 
