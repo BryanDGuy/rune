@@ -7,8 +7,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/bryandguy/rune/rune/test/testutil"
 	runesdk "github.com/bryandguy/rune/sdk/go"
+	"github.com/bryandguy/rune/sdk/go/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
