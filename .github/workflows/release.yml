@@ -29,6 +29,7 @@ jobs:
     if: needs.release.outputs.published == 'true'
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       packages: write
     steps:
       - uses: actions/checkout@v6
@@ -40,15 +41,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/rune
+          tags: |
+            type=raw,value=${{ needs.release.outputs.version }}
+            type=raw,value=${{ needs.release.outputs.version }},suffix=-{{sha}}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.version }}
+            type=raw,value=latest
+
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
           context: .
           file: rune/Dockerfile
           push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/rune:${{ needs.release.outputs.version }}
-            ghcr.io/${{ github.repository_owner }}/rune:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
   binaries:
     needs: release
