@@ -1,6 +1,8 @@
 .git
 .gitignore
-/rune
 /data
 docs/
 *.md
+bin/
+rune/test/
+sdk/go/testutil_test.go

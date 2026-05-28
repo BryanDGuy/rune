@@ -2,10 +2,12 @@ FROM golang:1.26 AS build
 
 WORKDIR /src
 
-COPY go.mod go.sum ./
+COPY go.work go.work.sum ./
+COPY rune/go.mod rune/go.sum ./rune/
+COPY sdk/go/go.mod sdk/go/go.sum ./sdk/go/
 RUN go mod download
-COPY . .
 
+COPY . .
 RUN make build
 
 FROM gcr.io/distroless/static-debian12
