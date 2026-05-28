@@ -104,6 +104,15 @@ func (m *Membership) register(ctx context.Context) error {
 }
 
 func (m *Membership) grantAndPut(ctx context.Context) error {
+	// Revoke any previously held lease before acquiring a new one to avoid
+	// accumulating leaked leases when Put fails and reregister retries.
+	if prev := clientv3.LeaseID(m.leaseID.Load()); prev != 0 {
+		rCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		_, _ = m.store.Revoke(rCtx, prev)
+		cancel()
+		m.leaseID.Store(0)
+	}
+
 	resp, err := m.store.Grant(ctx, leaseTTLSeconds)
 	if err != nil {
 		return err
