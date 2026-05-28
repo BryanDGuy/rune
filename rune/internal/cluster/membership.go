@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/bryandguy/rune/rune/internal/logging"
@@ -47,7 +48,7 @@ type Membership struct {
 	logger   *logging.Logger
 	nodeID   string
 	nodeAddr string
-	leaseID  clientv3.LeaseID
+	leaseID  atomic.Int64
 	wg       sync.WaitGroup
 }
 
@@ -81,10 +82,10 @@ func (m *Membership) Start(ctx context.Context) error {
 	if err != nil {
 		m.cancel()
 		m.wg.Wait()
-		if m.leaseID != 0 {
+		if m.leaseID.Load() != 0 {
 			rCtx, rCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer rCancel()
-			_, _ = m.store.Revoke(rCtx, m.leaseID)
+			_, _ = m.store.Revoke(rCtx, clientv3.LeaseID(m.leaseID.Load()))
 		}
 		return fmt.Errorf("populate ring: %w", err)
 	}
@@ -97,23 +98,32 @@ func (m *Membership) register(ctx context.Context) error {
 	if err := m.grantAndPut(ctx); err != nil {
 		return err
 	}
-	m.logger.Info("registered in cluster", "addr", m.nodeAddr, "lease", int64(m.leaseID))
+	m.logger.Info("registered in cluster", "addr", m.nodeAddr, "lease", m.leaseID.Load())
 	m.wg.Go(func() { m.keepAliveLoop(ctx) })
 	return nil
 }
 
 func (m *Membership) grantAndPut(ctx context.Context) error {
+	// Revoke any previously held lease before acquiring a new one to avoid
+	// accumulating leaked leases when Put fails and reregister retries.
+	if prev := clientv3.LeaseID(m.leaseID.Load()); prev != 0 {
+		rCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		_, _ = m.store.Revoke(rCtx, prev)
+		cancel()
+		m.leaseID.Store(0)
+	}
+
 	resp, err := m.store.Grant(ctx, leaseTTLSeconds)
 	if err != nil {
 		return err
 	}
-	m.leaseID = resp.ID
+	m.leaseID.Store(int64(resp.ID))
 
 	val, err := json.Marshal(router.Node{ID: m.nodeID, Addr: m.nodeAddr})
 	if err != nil {
 		return err
 	}
-	_, err = m.store.Put(ctx, router.NodeKeyPrefix+m.nodeID, string(val), clientv3.WithLease(m.leaseID))
+	_, err = m.store.Put(ctx, router.NodeKeyPrefix+m.nodeID, string(val), clientv3.WithLease(clientv3.LeaseID(m.leaseID.Load())))
 	return err
 }
 
@@ -122,7 +132,7 @@ func (m *Membership) grantAndPut(ctx context.Context) error {
 // lease lapsed (etcd unreachable past the TTL) and the node has dropped out of the ring.
 func (m *Membership) keepAliveLoop(ctx context.Context) {
 	for {
-		kaCh, err := m.store.KeepAlive(ctx, m.leaseID)
+		kaCh, err := m.store.KeepAlive(ctx, clientv3.LeaseID(m.leaseID.Load()))
 		if err == nil {
 			for {
 				if _, ok := <-kaCh; !ok {
@@ -133,7 +143,7 @@ func (m *Membership) keepAliveLoop(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		m.logger.Warn("lease lost, re-registering", "lease", int64(m.leaseID))
+		m.logger.Warn("lease lost, re-registering", "lease", m.leaseID.Load())
 		m.reregister(ctx)
 	}
 }
@@ -141,7 +151,7 @@ func (m *Membership) keepAliveLoop(ctx context.Context) {
 func (m *Membership) reregister(ctx context.Context) {
 	for ctx.Err() == nil {
 		if err := m.grantAndPut(ctx); err == nil {
-			m.logger.Info("re-registered in cluster", "lease", int64(m.leaseID))
+			m.logger.Info("re-registered in cluster", "lease", m.leaseID.Load())
 			return
 		}
 		select {
@@ -178,7 +188,6 @@ func (m *Membership) watchLoop(ctx context.Context, rev int64) {
 				break
 			}
 			for _, ev := range wresp.Events {
-				rev = ev.Kv.ModRevision
 				switch ev.Type {
 				case mvccpb.PUT:
 					if id, ok := m.applyPut(ev.Kv.Value); ok && id != m.nodeID {
@@ -196,15 +205,21 @@ func (m *Membership) watchLoop(ctx context.Context, rev int64) {
 		if ctx.Err() != nil {
 			return
 		}
-		// Watch dropped while ctx is still live — backoff then resync to recover any missed events.
+		// Watch dropped while ctx is still live — retry populate until it succeeds so
+		// we never restart the watch from a compacted revision.
 		m.logger.Warn("watch dropped, resyncing ring")
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(time.Second):
-		}
-		if newRev, err := m.populate(ctx); err == nil {
-			rev = newRev
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Second):
+			}
+			newRev, err := m.populate(ctx)
+			if err == nil {
+				rev = newRev
+				break
+			}
+			m.logger.Warn("resync failed, retrying")
 		}
 	}
 }
@@ -232,9 +247,9 @@ func (m *Membership) Stop() {
 		m.cancel()
 	}
 	m.wg.Wait()
-	if m.leaseID != 0 {
+	if m.leaseID.Load() != 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_, _ = m.store.Revoke(ctx, m.leaseID)
+		_, _ = m.store.Revoke(ctx, clientv3.LeaseID(m.leaseID.Load()))
 	}
 }

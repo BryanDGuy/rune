@@ -176,6 +176,10 @@ func (c *ClusterClient) Set(ctx context.Context, key string, r io.Reader, opts *
 // directly; keys without a cached owner are sent to an arbitrary node (which only
 // succeeds if that node owns the key). Perform a Get or Set before Delete for keys
 // that have not been previously accessed to ensure correct routing.
+//
+// Delete attempts every node even if one fails. On error, some keys may already
+// be deleted — the operation is not atomic across nodes. The first error encountered
+// is returned; callers should not assume a non-nil error means no keys were removed.
 func (c *ClusterClient) Delete(ctx context.Context, keys ...string) error {
 	byAddr := make(map[string][]string)
 	c.mu.RLock()
@@ -189,19 +193,28 @@ func (c *ClusterClient) Delete(ctx context.Context, keys ...string) error {
 	}
 	c.mu.RUnlock()
 
+	var firstErr error
 	for addr, addrKeys := range byAddr {
 		client, err := c.connFor(addr)
 		if err != nil {
-			return err
-		}
-		if err := client.Delete(ctx, addrKeys...); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
 			for _, key := range addrKeys {
 				c.evictHint(key)
 			}
-			return err
+			continue
+		}
+		if err := client.Delete(ctx, addrKeys...); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			for _, key := range addrKeys {
+				c.evictHint(key)
+			}
 		}
 	}
-	return nil
+	return firstErr
 }
 
 func (c *ClusterClient) Close() error {
