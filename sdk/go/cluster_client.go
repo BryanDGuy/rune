@@ -189,19 +189,28 @@ func (c *ClusterClient) Delete(ctx context.Context, keys ...string) error {
 	}
 	c.mu.RUnlock()
 
+	var firstErr error
 	for addr, addrKeys := range byAddr {
 		client, err := c.connFor(addr)
 		if err != nil {
-			return err
-		}
-		if err := client.Delete(ctx, addrKeys...); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
 			for _, key := range addrKeys {
 				c.evictHint(key)
 			}
-			return err
+			continue
+		}
+		if err := client.Delete(ctx, addrKeys...); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			for _, key := range addrKeys {
+				c.evictHint(key)
+			}
 		}
 	}
-	return nil
+	return firstErr
 }
 
 func (c *ClusterClient) Close() error {
