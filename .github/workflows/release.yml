@@ -48,8 +48,6 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/rune
           tags: |
             type=raw,value=${{ needs.release.outputs.version }}
-            type=raw,value=${{ needs.release.outputs.version }},suffix=-{{sha}}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.version }}
             type=raw,value=latest
 
       - name: Build and push
