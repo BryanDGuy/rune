@@ -85,10 +85,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: |
-          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
-            -o rune-${{ matrix.goos }}-${{ matrix.goarch }} \
-            ./rune/cmd/rune
+        run: make build BINARY=rune-${{ matrix.goos }}-${{ matrix.goarch }}
 
       - name: Upload to release
         uses: softprops/action-gh-release@v2
