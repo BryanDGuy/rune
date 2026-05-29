@@ -10,6 +10,7 @@ import (
 	"github.com/bryandguy/rune/rune/internal/config"
 	runev1 "github.com/bryandguy/rune/rune/internal/gen/rune/v1"
 	"github.com/bryandguy/rune/rune/internal/logging"
+	"github.com/bryandguy/rune/rune/internal/metrics"
 	"github.com/bryandguy/rune/rune/internal/storage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -21,6 +22,7 @@ type Server struct {
 	cfg          *config.Config
 	store        storage.Storage
 	logger       *logging.Logger
+	m            *metrics.Metrics
 	membership   cluster.MembershipIface // nil in single-node mode
 	dialer       *cluster.PeerDialer     // nil in single-node mode
 	grpcServer   *grpc.Server
@@ -36,24 +38,37 @@ type ClusterOptions struct {
 }
 
 // New creates a Server. Pass a non-nil clusterOpts to run in cluster mode; nil is
-// single-node. A nil logger discards all log output.
-func New(cfg *config.Config, store storage.Storage, logger *logging.Logger, clusterOpts *ClusterOptions) *Server {
+// single-node. A nil logger discards all log output. A nil m disables metrics.
+func New(cfg *config.Config, store storage.Storage, logger *logging.Logger, clusterOpts *ClusterOptions, m *metrics.Metrics) *Server {
 	if logger == nil {
 		logger = logging.Discard()
 	}
-	s := &Server{cfg: cfg, store: store, logger: logger}
+	s := &Server{cfg: cfg, store: store, logger: logger, m: m}
 	if clusterOpts != nil {
 		s.membership = clusterOpts.Membership
 		s.dialer = clusterOpts.Dialer
 	}
-	s.tracker = &connTracker{}
+	s.tracker = &connTracker{m: m}
+
+	unaryInterceptors := []grpc.UnaryServerInterceptor{s.logUnary, s.recoverUnary}
+	streamInterceptors := []grpc.StreamServerInterceptor{s.logStream, s.recoverStream}
+	if m != nil {
+		unaryInterceptors = append([]grpc.UnaryServerInterceptor{m.GRPC.UnaryServerInterceptor()}, unaryInterceptors...)
+		streamInterceptors = append([]grpc.StreamServerInterceptor{m.GRPC.StreamServerInterceptor()}, streamInterceptors...)
+	}
+
 	s.grpcServer = grpc.NewServer(
 		grpc.StatsHandler(s.tracker),
-		grpc.ChainUnaryInterceptor(s.logUnary, s.recoverUnary),
-		grpc.ChainStreamInterceptor(s.logStream, s.recoverStream),
+		grpc.ChainUnaryInterceptor(unaryInterceptors...),
+		grpc.ChainStreamInterceptor(streamInterceptors...),
 	)
 	runev1.RegisterRuneServiceServer(s.grpcServer, &handler{srv: s})
 	registerHealth(s)
+
+	if m != nil {
+		m.GRPC.InitializeMetrics(s.grpcServer)
+	}
+
 	return s
 }
 
@@ -88,6 +103,7 @@ func (s *Server) ActiveConns() int64 {
 
 // connTracker implements stats.Handler to count active connections.
 type connTracker struct {
+	m     *metrics.Metrics
 	conns atomic.Int64
 }
 
@@ -103,7 +119,13 @@ func (t *connTracker) HandleConn(_ context.Context, cs stats.ConnStats) {
 	switch cs.(type) {
 	case *stats.ConnBegin:
 		t.conns.Add(1)
+		if t.m != nil {
+			t.m.ActiveConns.Inc()
+		}
 	case *stats.ConnEnd:
 		t.conns.Add(-1)
+		if t.m != nil {
+			t.m.ActiveConns.Dec()
+		}
 	}
 }

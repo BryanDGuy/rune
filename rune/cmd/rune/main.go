@@ -55,7 +55,7 @@ func main() {
 
 func buildServer(cfg *config.Config, store storage.Storage, logger *logging.Logger) (*server.Server, func()) {
 	if len(cfg.EtcdEndpoints) == 0 {
-		return server.New(cfg, store, logger, nil), func() {}
+		return server.New(cfg, store, logger, nil, nil), func() {}
 	}
 
 	etcdClient, err := clientv3.New(clientv3.Config{
@@ -80,5 +80,5 @@ func buildServer(cfg *config.Config, store storage.Storage, logger *logging.Logg
 		dialer.Close()
 		_ = etcdClient.Close()
 	}
-	return server.New(cfg, store, logger, &server.ClusterOptions{Membership: m, Dialer: dialer}), cleanup
+	return server.New(cfg, store, logger, &server.ClusterOptions{Membership: m, Dialer: dialer}, nil), cleanup
 }

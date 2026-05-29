@@ -66,7 +66,7 @@ func NewBufconnConn(t *testing.T, bufSize int, opts *BufconnOptions) (*grpc.Clie
 	}
 
 	lis := bufconn.Listen(bufSize)
-	srv := server.New(cfg, store, nil, clusterOpts)
+	srv := server.New(cfg, store, nil, clusterOpts, nil)
 	srv.StartOnListener(lis)
 
 	addr := fmt.Sprintf("passthrough://bufnet-%d", bufconnSeq.Add(1))

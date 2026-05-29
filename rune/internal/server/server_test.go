@@ -87,7 +87,7 @@ func TestReadinessNotServingAfterStop(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 
 	lis := bufconn.Listen(bufSize)
-	srv := server.New(cfg, store, nil, nil)
+	srv := server.New(cfg, store, nil, nil, nil)
 	srv.StartOnListener(lis)
 
 	conn, err := grpc.NewClient(
@@ -395,7 +395,7 @@ func TestGracefulShutdown(t *testing.T) {
 	require.NoError(t, err)
 
 	lis := bufconn.Listen(1 << 20)
-	srv := server.New(cfg, store, nil, nil)
+	srv := server.New(cfg, store, nil, nil, nil)
 	srv.StartOnListener(lis)
 
 	done := make(chan struct{})
