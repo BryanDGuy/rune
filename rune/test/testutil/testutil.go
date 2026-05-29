@@ -50,7 +50,7 @@ func BaseConfig(t *testing.T) *config.Config {
 func NewBufconnConn(t *testing.T, bufSize int, opts *BufconnOptions) (*grpc.ClientConn, func()) {
 	t.Helper()
 	cfg := BaseConfig(t)
-	store, err := storage.NewBadgerStore(cfg)
+	store, err := storage.NewBadgerStore(cfg, nil)
 	require.NoError(t, err)
 
 	var clusterOpts *server.ClusterOptions

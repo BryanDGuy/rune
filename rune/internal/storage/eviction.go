@@ -136,6 +136,9 @@ func checkEviction(ctx context.Context, store *BadgerStore) error {
 		store.eviction.remove(key)
 		if deleted {
 			store.evictionsTotal.Add(1)
+			if store.m != nil {
+				store.m.EvictionsTotal.Inc()
+			}
 		}
 	}
 

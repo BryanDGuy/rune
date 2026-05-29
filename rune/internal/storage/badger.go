@@ -9,12 +9,14 @@ import (
 	"time"
 
 	"github.com/bryandguy/rune/rune/internal/config"
+	"github.com/bryandguy/rune/rune/internal/metrics"
 	badger "github.com/dgraph-io/badger/v4"
 )
 
 type BadgerStore struct {
 	db             *badger.DB
 	cfg            *config.Config
+	m              *metrics.Metrics
 	eviction       *evictionIndex
 	cancel         context.CancelFunc
 	wg             sync.WaitGroup
@@ -24,7 +26,7 @@ type BadgerStore struct {
 	gcRunning      atomic.Bool
 }
 
-func NewBadgerStore(cfg *config.Config) (*BadgerStore, error) {
+func NewBadgerStore(cfg *config.Config, m *metrics.Metrics) (*BadgerStore, error) {
 	opts := badger.DefaultOptions(cfg.DataDir)
 	opts.Logger = nil
 	if cfg.BlockCacheSize > 0 {
@@ -35,10 +37,18 @@ func NewBadgerStore(cfg *config.Config) (*BadgerStore, error) {
 		return nil, fmt.Errorf("open badger: %w", err)
 	}
 
+	if m != nil {
+		m.RegisterStorageSize(func() int64 {
+			lsm, vlog := db.Size()
+			return lsm + vlog
+		})
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &BadgerStore{
 		db:       db,
 		cfg:      cfg,
+		m:        m,
 		eviction: newEvictionIndex(),
 		cancel:   cancel,
 	}
@@ -74,12 +84,18 @@ func (s *BadgerStore) Get(key string) ([]byte, error) {
 	})
 	if errors.Is(err, badger.ErrKeyNotFound) {
 		s.misses.Add(1)
+		if s.m != nil {
+			s.m.CacheMisses.Inc()
+		}
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
 	s.hits.Add(1)
+	if s.m != nil {
+		s.m.CacheHits.Inc()
+	}
 	s.eviction.recordAccess(key)
 	return buf, nil
 }

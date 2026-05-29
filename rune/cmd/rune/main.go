@@ -26,7 +26,7 @@ func main() {
 
 	logger := logging.New(logging.ParseLevel(cfg.LogLevel))
 
-	store, err := storage.NewBadgerStore(cfg)
+	store, err := storage.NewBadgerStore(cfg, nil)
 	if err != nil {
 		logger.Error("open storage", "err", err)
 		os.Exit(1)

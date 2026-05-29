@@ -82,7 +82,7 @@ func TestHealthReadiness(t *testing.T) {
 
 func TestReadinessNotServingAfterStop(t *testing.T) {
 	cfg := testutil.BaseConfig(t)
-	store, err := storage.NewBadgerStore(cfg)
+	store, err := storage.NewBadgerStore(cfg, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
 
@@ -391,7 +391,7 @@ func TestLargePayload(t *testing.T) {
 
 func TestGracefulShutdown(t *testing.T) {
 	cfg := testutil.BaseConfig(t)
-	store, err := storage.NewBadgerStore(cfg)
+	store, err := storage.NewBadgerStore(cfg, nil)
 	require.NoError(t, err)
 
 	lis := bufconn.Listen(1 << 20)

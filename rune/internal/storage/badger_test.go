@@ -2,10 +2,13 @@ package storage
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/bryandguy/rune/rune/internal/config"
+	"github.com/bryandguy/rune/rune/internal/metrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +28,7 @@ func baseStorageTestConfig(t *testing.T) *config.Config {
 
 func newTestStore(t *testing.T) *BadgerStore {
 	t.Helper()
-	s, err := NewBadgerStore(baseStorageTestConfig(t))
+	s, err := NewBadgerStore(baseStorageTestConfig(t), nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, s.Close()) })
 	return s
@@ -83,7 +86,7 @@ func newGCTestStore(t *testing.T) *BadgerStore {
 	t.Helper()
 	cfg := baseStorageTestConfig(t)
 	cfg.GCInterval = 100 * time.Millisecond
-	s, err := NewBadgerStore(cfg)
+	s, err := NewBadgerStore(cfg, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
 	return s
@@ -125,7 +128,7 @@ func TestGCConcurrentCallsSkipped(t *testing.T) {
 func TestBadgerBlockCacheEnabled(t *testing.T) {
 	cfg := baseStorageTestConfig(t)
 	cfg.BlockCacheSize = 32 * 1024 * 1024 // 32MB
-	s, err := NewBadgerStore(cfg)
+	s, err := NewBadgerStore(cfg, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, s.Close()) })
 
@@ -136,7 +139,7 @@ func TestBadgerBlockCacheEnabled(t *testing.T) {
 }
 
 func TestGCLoopStopsOnCancel(t *testing.T) {
-	s, err := NewBadgerStore(baseStorageTestConfig(t))
+	s, err := NewBadgerStore(baseStorageTestConfig(t), nil)
 	require.NoError(t, err)
 
 	done := make(chan error, 1)
@@ -150,4 +153,23 @@ func TestGCLoopStopsOnCancel(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Close() did not return within timeout — maintenanceLoop may be stuck")
 	}
+}
+
+func TestBadgerMetricsCounters(t *testing.T) {
+	m := metrics.New()
+	s, err := NewBadgerStore(baseStorageTestConfig(t), m)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, s.Close()) })
+
+	_, _ = s.Get("nokey") // miss
+
+	require.NoError(t, s.Set("k", []byte("v"), 0))
+	_, _ = s.Get("k") // hit
+
+	w := httptest.NewRecorder()
+	m.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body := w.Body.String()
+
+	assert.Contains(t, body, "rune_cache_hits_total 1")
+	assert.Contains(t, body, "rune_cache_misses_total 1")
 }
