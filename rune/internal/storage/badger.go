@@ -37,13 +37,6 @@ func NewBadgerStore(cfg *config.Config, m *metrics.Metrics) (*BadgerStore, error
 		return nil, fmt.Errorf("open badger: %w", err)
 	}
 
-	if m != nil {
-		m.RegisterStorageSize(func() int64 {
-			lsm, vlog := db.Size()
-			return lsm + vlog
-		})
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &BadgerStore{
 		db:       db,
@@ -57,6 +50,13 @@ func NewBadgerStore(cfg *config.Config, m *metrics.Metrics) (*BadgerStore, error
 		cancel()
 		_ = db.Close()
 		return nil, fmt.Errorf("init eviction index: %w", err)
+	}
+
+	if m != nil {
+		m.RegisterStorageSize(func() int64 {
+			lsm, vlog := db.Size()
+			return lsm + vlog
+		})
 	}
 
 	s.wg.Go(func() { s.maintenanceLoop(ctx) })

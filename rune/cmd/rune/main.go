@@ -41,6 +41,9 @@ func main() {
 
 	if err := srv.Start(context.Background()); err != nil {
 		clusterCleanup()
+		if closeErr := store.Close(); closeErr != nil {
+			logger.Error("close storage", "err", closeErr)
+		}
 		logger.Error("start server", "err", err)
 		os.Exit(1)
 	}
@@ -51,7 +54,11 @@ func main() {
 		Handler:           m.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	go func() { _ = metricsSrv.ListenAndServe() }()
+	go func() {
+		if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("metrics server error", "err", err)
+		}
+	}()
 	logger.Info("metrics listening", "port", cfg.MetricsPort)
 
 	quit := make(chan os.Signal, 1)
