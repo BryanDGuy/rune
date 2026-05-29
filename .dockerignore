@@ -5,4 +5,4 @@ docs/
 *.md
 bin/
 rune/test/
-sdk/go/testutil_test.go
+sdk/go/internal/testutil/
