@@ -58,35 +58,3 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
-  binaries:
-    needs: release
-    if: needs.release.outputs.published == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    strategy:
-      matrix:
-        include:
-          - { goos: linux,  goarch: amd64 }
-          - { goos: linux,  goarch: arm64 }
-          - { goos: darwin, goarch: amd64 }
-          - { goos: darwin, goarch: arm64 }
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.work
-
-      - name: Build
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: make build BINARY=rune-${{ matrix.goos }}-${{ matrix.goarch }}
-
-      - name: Upload to release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: v${{ needs.release.outputs.version }}
-          files: rune-${{ matrix.goos }}-${{ matrix.goarch }}
