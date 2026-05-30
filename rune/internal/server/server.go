@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"sync/atomic"
+	"time"
 
 	"github.com/bryandguy/rune/rune/internal/cluster"
 	"github.com/bryandguy/rune/rune/internal/config"
@@ -94,7 +95,18 @@ func (s *Server) StartOnListener(lis net.Listener) {
 
 func (s *Server) Stop() {
 	s.healthServer.SetServingStatus(ReadinessService, healthpb.HealthCheckResponse_NOT_SERVING)
-	s.grpcServer.GracefulStop()
+	stopped := make(chan struct{})
+	go func() {
+		s.grpcServer.GracefulStop()
+		close(stopped)
+	}()
+	t := time.NewTimer(30 * time.Second)
+	defer t.Stop()
+	select {
+	case <-stopped:
+	case <-t.C:
+		s.grpcServer.Stop()
+	}
 }
 
 func (s *Server) ActiveConns() int64 {

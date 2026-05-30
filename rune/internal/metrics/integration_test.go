@@ -53,13 +53,14 @@ func TestIntegrationMetricsScrape(t *testing.T) {
 // needed — InitializeMetrics pre-populates label combinations.
 func TestIntegrationGRPCMetrics(t *testing.T) {
 	m := metrics.New()
-	store, err := storage.NewBadgerStore(baseIntegrationConfig(t), m)
+	cfg := baseIntegrationConfig(t)
+	store, err := storage.NewBadgerStore(cfg, m)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, store.Close()) })
 
 	// server.New calls m.GRPC.InitializeMetrics after RegisterRuneServiceServer,
 	// which pre-populates label combinations so grpc_server_* series are emitted.
-	srv := server.New(baseIntegrationConfig(t), store, nil, nil, m)
+	srv := server.New(cfg, store, nil, nil, m)
 	defer srv.Stop()
 
 	w := httptest.NewRecorder()
