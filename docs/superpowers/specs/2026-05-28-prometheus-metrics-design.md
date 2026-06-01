@@ -6,7 +6,7 @@ Expose a `/metrics` HTTP endpoint on a dedicated port so Prometheus can scrape o
 
 ## Architecture
 
-A new `rune/internal/metrics` package owns all metric definitions and a single `prometheus.Registry`. The registry is constructed once in `main.go` and passed into `BadgerStore` and the gRPC `Server` at construction time — no global registry, no registration conflicts in tests.
+A new `rune/internal/telemetry` package owns all metric definitions and a single `prometheus.Registry`. The registry is constructed once in `main.go` and passed into `BadgerStore` and the gRPC `Server` at construction time — no global registry, no registration conflicts in tests.
 
 `main.go` starts an `http.Server` on `RUNE_METRICS_PORT` (default 9090) serving `promhttp.HandlerFor(registry, promhttp.HandlerOpts{})`. The metrics server is always-on; operators can firewall the port if they don't want it exposed. Overhead when not scraped is negligible.
 
@@ -27,7 +27,7 @@ All custom metrics use the `rune_` namespace. No additional labels beyond what g
 
 ## File Changes
 
-### `rune/internal/metrics/metrics.go` (new)
+### `rune/internal/telemetry/metrics.go` (new)
 
 Defines a `Metrics` struct holding all custom metric instances plus the registry. Exports:
 
@@ -37,6 +37,7 @@ type Metrics struct {
     CacheMisses      prometheus.Counter
     EvictionsTotal   prometheus.Counter
     ActiveConns      prometheus.Gauge
+    GRPC             *grpc_prometheus.ServerMetrics
     Registry         *prometheus.Registry
 }
 
@@ -50,7 +51,7 @@ go-grpc-prometheus metrics are registered against the same registry inside `New(
 
 ### `rune/internal/storage/badger.go`
 
-- `BadgerStore` receives a `*metrics.Metrics` in `NewBadgerStore(cfg, m)`.
+- `BadgerStore` receives a `*telemetry.Metrics` in `NewBadgerStore(cfg, m)`.
 - Replace `hits atomic.Int64`, `misses atomic.Int64`, `evictionsTotal atomic.Int64` with the corresponding `prometheus.Counter` fields from `m`.
 - After `db` is opened, call `m.RegisterStorageSize(func() int64 { lsm, vlog := db.Size(); return lsm + vlog })`.
 - `Info()` continues to work: reads the counter values via `.Get()` on the `prometheus.Counter` (or keeps a parallel atomic if the counter doesn't expose `.Get()` — see note below).
@@ -59,7 +60,7 @@ go-grpc-prometheus metrics are registered against the same registry inside `New(
 
 ### `rune/internal/server/server.go`
 
-- `New()` receives a `*metrics.Metrics`.
+- `New()` receives a `*telemetry.Metrics`.
 - Prepend `grpc_prometheus.UnaryServerInterceptor` and `grpc_prometheus.StreamServerInterceptor` to the existing interceptor chains.
 - After `grpc.NewServer(...)` and after all services are registered with `RegisterRuneServiceServer`, call `grpc_prometheus.Register(s.grpcServer)` to initialise per-method metric labels. This must happen after service registration so go-grpc-prometheus can enumerate all methods.
 - Replace `connTracker` atomic increments with `m.ActiveConns.Inc()` / `m.ActiveConns.Dec()`.
@@ -71,7 +72,7 @@ Add `MetricsPort int` with default `9090`. Read from `RUNE_METRICS_PORT` env var
 ### `rune/cmd/rune/main.go`
 
 ```go
-m := metrics.New()
+m := telemetry.New()
 store, err := storage.NewBadgerStore(cfg, m)
 srv := server.New(cfg, store, logger, clusterOpts, m)
 
