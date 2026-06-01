@@ -82,7 +82,7 @@ func newEvictionTestStore(t *testing.T, maxBytes int64) *BadgerStore {
 	cfg := baseStorageTestConfig(t)
 	cfg.MaxStorageBytes = maxBytes
 	cfg.EvictionThreshold = 0.5
-	s, err := NewBadgerStore(cfg)
+	s, err := NewBadgerStore(cfg, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })
 	return s

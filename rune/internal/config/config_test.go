@@ -109,3 +109,16 @@ func TestBlockCacheSizeEnvOverride(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(256*1024*1024), cfg.BlockCacheSize)
 }
+
+func TestMetricsPortDefault(t *testing.T) {
+	cfg, err := LoadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, 9090, cfg.MetricsPort)
+}
+
+func TestMetricsPortEnvOverride(t *testing.T) {
+	t.Setenv("RUNE_METRICS_PORT", "8080")
+	cfg, err := LoadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, 8080, cfg.MetricsPort)
+}

@@ -82,12 +82,12 @@ func TestHealthReadiness(t *testing.T) {
 
 func TestReadinessNotServingAfterStop(t *testing.T) {
 	cfg := testutil.BaseConfig(t)
-	store, err := storage.NewBadgerStore(cfg)
+	store, err := storage.NewBadgerStore(cfg, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() })
 
 	lis := bufconn.Listen(bufSize)
-	srv := server.New(cfg, store, nil, nil)
+	srv := server.New(cfg, store, nil, nil, nil)
 	srv.StartOnListener(lis)
 
 	conn, err := grpc.NewClient(
@@ -391,11 +391,11 @@ func TestLargePayload(t *testing.T) {
 
 func TestGracefulShutdown(t *testing.T) {
 	cfg := testutil.BaseConfig(t)
-	store, err := storage.NewBadgerStore(cfg)
+	store, err := storage.NewBadgerStore(cfg, nil)
 	require.NoError(t, err)
 
 	lis := bufconn.Listen(1 << 20)
-	srv := server.New(cfg, store, nil, nil)
+	srv := server.New(cfg, store, nil, nil, nil)
 	srv.StartOnListener(lis)
 
 	done := make(chan struct{})
