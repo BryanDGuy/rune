@@ -39,7 +39,7 @@ func TestIntegrationMetricsScrape(t *testing.T) {
 	_, _ = store.Get("nope") // miss
 
 	w := httptest.NewRecorder()
-	m.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	m.Handler().ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", nil))
 	require.Equal(t, 200, w.Code)
 
 	body := w.Body.String()
@@ -64,7 +64,7 @@ func TestIntegrationGRPCMetrics(t *testing.T) {
 	defer srv.Stop()
 
 	w := httptest.NewRecorder()
-	m.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	m.Handler().ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", nil))
 	require.Equal(t, 200, w.Code)
 
 	body := w.Body.String()
