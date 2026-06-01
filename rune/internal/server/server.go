@@ -11,8 +11,8 @@ import (
 	"github.com/bryandguy/rune/rune/internal/config"
 	runev1 "github.com/bryandguy/rune/rune/internal/gen/rune/v1"
 	"github.com/bryandguy/rune/rune/internal/logging"
-	"github.com/bryandguy/rune/rune/internal/metrics"
 	"github.com/bryandguy/rune/rune/internal/storage"
+	"github.com/bryandguy/rune/rune/internal/telemetry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -23,7 +23,7 @@ type Server struct {
 	cfg          *config.Config
 	store        storage.Storage
 	logger       *logging.Logger
-	m            *metrics.Metrics
+	m            *telemetry.Metrics
 	membership   cluster.MembershipIface // nil in single-node mode
 	dialer       *cluster.PeerDialer     // nil in single-node mode
 	grpcServer   *grpc.Server
@@ -39,8 +39,8 @@ type ClusterOptions struct {
 }
 
 // New creates a Server. Pass a non-nil clusterOpts to run in cluster mode; nil is
-// single-node. A nil logger discards all log output. A nil m disables metrics.
-func New(cfg *config.Config, store storage.Storage, logger *logging.Logger, clusterOpts *ClusterOptions, m *metrics.Metrics) *Server {
+// single-node. A nil logger discards all log output. A nil m disables telemetry.
+func New(cfg *config.Config, store storage.Storage, logger *logging.Logger, clusterOpts *ClusterOptions, m *telemetry.Metrics) *Server {
 	if logger == nil {
 		logger = logging.Discard()
 	}
@@ -115,7 +115,7 @@ func (s *Server) ActiveConns() int64 {
 
 // connTracker implements stats.Handler to count active connections.
 type connTracker struct {
-	m     *metrics.Metrics
+	m     *telemetry.Metrics
 	conns atomic.Int64
 }
 

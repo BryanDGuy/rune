@@ -16,9 +16,9 @@ import (
 	"github.com/bryandguy/rune/rune/internal/cluster"
 	"github.com/bryandguy/rune/rune/internal/config"
 	"github.com/bryandguy/rune/rune/internal/logging"
-	"github.com/bryandguy/rune/rune/internal/metrics"
 	"github.com/bryandguy/rune/rune/internal/server"
 	"github.com/bryandguy/rune/rune/internal/storage"
+	"github.com/bryandguy/rune/rune/internal/telemetry"
 )
 
 func main() {
@@ -30,7 +30,7 @@ func main() {
 
 	logger := logging.New(logging.ParseLevel(cfg.LogLevel))
 
-	m := metrics.New()
+	m := telemetry.New()
 
 	metricsLis, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", fmt.Sprintf(":%d", cfg.MetricsPort))
 	if err != nil {
@@ -86,7 +86,7 @@ func main() {
 	}
 }
 
-func buildServer(cfg *config.Config, store storage.Storage, logger *logging.Logger, m *metrics.Metrics) (*server.Server, func()) {
+func buildServer(cfg *config.Config, store storage.Storage, logger *logging.Logger, m *telemetry.Metrics) (*server.Server, func()) {
 	if len(cfg.EtcdEndpoints) == 0 {
 		return server.New(cfg, store, logger, nil, m), func() {}
 	}

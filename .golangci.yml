@@ -68,10 +68,6 @@ linters:
       - comments
       - common-false-positives
       - std-error-handling
-    rules:
-      - linters: [revive]
-        text: "avoid package names that conflict"
-        path: "rune/internal/metrics/"
 
 formatters:
   enable:

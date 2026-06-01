@@ -1,4 +1,4 @@
-package metrics_test
+package telemetry_test
 
 import (
 	"net/http"
@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/bryandguy/rune/rune/internal/config"
-	"github.com/bryandguy/rune/rune/internal/metrics"
 	"github.com/bryandguy/rune/rune/internal/server"
 	"github.com/bryandguy/rune/rune/internal/storage"
+	"github.com/bryandguy/rune/rune/internal/telemetry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +29,7 @@ func baseIntegrationConfig(t *testing.T) *config.Config {
 }
 
 func TestIntegrationMetricsScrape(t *testing.T) {
-	m := metrics.New()
+	m := telemetry.New()
 	store, err := storage.NewBadgerStore(baseIntegrationConfig(t), m)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, store.Close()) })
@@ -52,7 +52,7 @@ func TestIntegrationMetricsScrape(t *testing.T) {
 // scrape output after server.New calls InitializeMetrics. No actual RPCs are
 // needed — InitializeMetrics pre-populates label combinations.
 func TestIntegrationGRPCMetrics(t *testing.T) {
-	m := metrics.New()
+	m := telemetry.New()
 	cfg := baseIntegrationConfig(t)
 	store, err := storage.NewBadgerStore(cfg, m)
 	require.NoError(t, err)

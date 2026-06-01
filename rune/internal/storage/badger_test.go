@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/bryandguy/rune/rune/internal/config"
-	"github.com/bryandguy/rune/rune/internal/metrics"
+	"github.com/bryandguy/rune/rune/internal/telemetry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -156,7 +156,7 @@ func TestGCLoopStopsOnCancel(t *testing.T) {
 }
 
 func TestBadgerMetricsCounters(t *testing.T) {
-	m := metrics.New()
+	m := telemetry.New()
 	s, err := NewBadgerStore(baseStorageTestConfig(t), m)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, s.Close()) })

@@ -9,14 +9,14 @@ import (
 	"time"
 
 	"github.com/bryandguy/rune/rune/internal/config"
-	"github.com/bryandguy/rune/rune/internal/metrics"
+	"github.com/bryandguy/rune/rune/internal/telemetry"
 	badger "github.com/dgraph-io/badger/v4"
 )
 
 type BadgerStore struct {
 	db             *badger.DB
 	cfg            *config.Config
-	m              *metrics.Metrics
+	m              *telemetry.Metrics
 	eviction       *evictionIndex
 	cancel         context.CancelFunc
 	wg             sync.WaitGroup
@@ -26,7 +26,7 @@ type BadgerStore struct {
 	gcRunning      atomic.Bool
 }
 
-func NewBadgerStore(cfg *config.Config, m *metrics.Metrics) (*BadgerStore, error) {
+func NewBadgerStore(cfg *config.Config, m *telemetry.Metrics) (*BadgerStore, error) {
 	opts := badger.DefaultOptions(cfg.DataDir)
 	opts.Logger = nil
 	if cfg.BlockCacheSize > 0 {

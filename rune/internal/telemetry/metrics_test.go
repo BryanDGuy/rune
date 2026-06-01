@@ -1,17 +1,17 @@
-package metrics_test
+package telemetry_test
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/bryandguy/rune/rune/internal/metrics"
+	"github.com/bryandguy/rune/rune/internal/telemetry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewRegistersAllMetrics(t *testing.T) {
-	m := metrics.New()
+	m := telemetry.New()
 
 	m.RegisterStorageSize(func() int64 { return 42 })
 
@@ -35,7 +35,7 @@ func TestNewRegistersAllMetrics(t *testing.T) {
 }
 
 func TestRegisterStorageSizePanicsOnSecondCall(t *testing.T) {
-	m := metrics.New()
+	m := telemetry.New()
 	m.RegisterStorageSize(func() int64 { return 0 })
 	assert.Panics(t, func() {
 		m.RegisterStorageSize(func() int64 { return 0 })
