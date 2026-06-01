@@ -16,7 +16,7 @@ func TestNewRegistersAllMetrics(t *testing.T) {
 	m.RegisterStorageSize(func() int64 { return 42 })
 
 	w := httptest.NewRecorder()
-	m.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	m.Handler().ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", nil))
 	require.Equal(t, 200, w.Code)
 
 	body := w.Body.String()

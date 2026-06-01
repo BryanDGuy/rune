@@ -167,7 +167,7 @@ func TestBadgerMetricsCounters(t *testing.T) {
 	_, _ = s.Get("k") // hit
 
 	w := httptest.NewRecorder()
-	m.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	m.Handler().ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", nil))
 	body := w.Body.String()
 
 	assert.Contains(t, body, "rune_cache_hits_total 1")
