@@ -60,6 +60,9 @@ verify-sdk: lint-sdk fmt-check-sdk vet-sdk modernize-sdk
 
 lint: lint-rune lint-sdk
 
+# golangci-lint refuses a Go toolchain newer than the one it was built with (1.26); override with GOTOOLCHAIN=...
+lint-rune lint-sdk: export GOTOOLCHAIN ?= go1.26.2
+
 lint-rune:
 	@golangci-lint run ./rune/...
 
@@ -93,18 +96,18 @@ vet-sdk:
 modernize: modernize-rune modernize-sdk
 
 modernize-rune:
-	@pkgs=$$(go list ./rune/... | grep -v /rune/internal/gen/); [ -z "$$pkgs" ] || go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest $$pkgs
+	@pkgs=$$(go list ./rune/... | grep -v /rune/internal/gen/); [ -z "$$pkgs" ] || go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@v0.23.0 $$pkgs
 
 modernize-sdk:
-	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/internal/gen/); [ -z "$$pkgs" ] || go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest $$pkgs
+	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/internal/gen/); [ -z "$$pkgs" ] || go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@v0.23.0 $$pkgs
 
 modernize-fix: modernize-fix-rune modernize-fix-sdk
 
 modernize-fix-rune:
-	@pkgs=$$(go list ./rune/... | grep -v /rune/internal/gen/); [ -z "$$pkgs" ] || go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix $$pkgs
+	@pkgs=$$(go list ./rune/... | grep -v /rune/internal/gen/); [ -z "$$pkgs" ] || go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@v0.23.0 -fix $$pkgs
 
 modernize-fix-sdk:
-	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/internal/gen/); [ -z "$$pkgs" ] || go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix $$pkgs
+	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/internal/gen/); [ -z "$$pkgs" ] || go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@v0.23.0 -fix $$pkgs
 
 # Local 3-node cluster + etcd via docker-compose (nodes on host ports 7946/7947/7948).
 cluster-up:
