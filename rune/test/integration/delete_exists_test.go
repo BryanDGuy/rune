@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	runev1 "github.com/bryandguy/rune/rune/internal/gen/rune/v1"
 	"github.com/bryandguy/rune/rune/internal/router"
 	"github.com/bryandguy/rune/rune/test/testutil"
+	runev1 "github.com/bryandguy/rune/sdk/go/gen/rune/v1"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
