@@ -141,3 +141,29 @@ func TestEtcdMembershipLeave(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "node-2", got.ID)
 }
+
+// TestEtcdMembershipPeerLeaveCallback verifies OnPeerLeave receives the departed
+// peer's address, so its pooled connection can be dropped.
+func TestEtcdMembershipPeerLeaveCallback(t *testing.T) {
+	endpoint := startEmbeddedEtcd(t)
+	ctx := t.Context()
+
+	left := make(chan string, 1)
+	m2 := cluster.New(newEtcdClient(t, endpoint), "node-2", "host2:7946", nil)
+	m2.OnPeerLeave = func(addr string) { left <- addr }
+	require.NoError(t, m2.Start(ctx))
+	t.Cleanup(m2.Stop)
+
+	m1 := cluster.New(newEtcdClient(t, endpoint), "node-1", "host1:7946", nil)
+	require.NoError(t, m1.Start(ctx))
+	require.Eventually(t, func() bool { return m2.Ring().Len() == 2 }, 5*time.Second, 20*time.Millisecond)
+
+	m1.Stop()
+
+	select {
+	case addr := <-left:
+		assert.Equal(t, "host1:7946", addr)
+	case <-time.After(5 * time.Second):
+		t.Fatal("OnPeerLeave not called")
+	}
+}

@@ -42,14 +42,16 @@ type MembershipIface interface {
 // If nodeAddr is non-empty, it also registers this node in etcd (server mode).
 // If nodeAddr is empty, it only watches (client mode).
 type Membership struct {
-	store    etcdClient
-	ring     *router.Router
-	cancel   context.CancelFunc
-	logger   *logging.Logger
-	nodeID   string
-	nodeAddr string
-	leaseID  atomic.Int64
-	wg       sync.WaitGroup
+	store  etcdClient
+	ring   *router.Router
+	cancel context.CancelFunc
+	logger *logging.Logger
+	// OnPeerLeave, if set before Start, is called with a peer's address when it leaves the ring.
+	OnPeerLeave func(addr string)
+	nodeID      string
+	nodeAddr    string
+	leaseID     atomic.Int64
+	wg          sync.WaitGroup
 }
 
 // New builds a Membership. A nil logger discards all log output.
@@ -181,7 +183,7 @@ func (m *Membership) populate(ctx context.Context) (int64, error) {
 
 func (m *Membership) watchLoop(ctx context.Context, rev int64) {
 	for {
-		opts := []clientv3.OpOption{clientv3.WithPrefix(), clientv3.WithRev(rev + 1)}
+		opts := []clientv3.OpOption{clientv3.WithPrefix(), clientv3.WithRev(rev + 1), clientv3.WithPrevKV()}
 		wch := m.store.Watch(ctx, router.NodeKeyPrefix, opts...)
 		for wresp := range wch {
 			if wresp.Err() != nil {
@@ -198,6 +200,7 @@ func (m *Membership) watchLoop(ctx context.Context, rev int64) {
 					m.ring.Remove(nodeID)
 					if nodeID != m.nodeID {
 						m.logger.Info("peer left", "peer_id", nodeID)
+						m.peerLeft(ev.PrevKv)
 					}
 				}
 			}
@@ -222,6 +225,14 @@ func (m *Membership) watchLoop(ctx context.Context, rev int64) {
 			m.logger.Warn("resync failed, retrying")
 		}
 	}
+}
+
+func (m *Membership) peerLeft(prev *mvccpb.KeyValue) {
+	var node router.Node
+	if m.OnPeerLeave == nil || prev == nil || json.Unmarshal(prev.Value, &node) != nil {
+		return
+	}
+	m.OnPeerLeave(node.Addr)
 }
 
 func (m *Membership) applyPut(val []byte) (nodeID string, ok bool) {

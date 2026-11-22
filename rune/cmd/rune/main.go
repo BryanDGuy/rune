@@ -21,6 +21,9 @@ import (
 	"github.com/bryandguy/rune/rune/internal/telemetry"
 )
 
+// leaveDelay gives peers' etcd watches time to see this node leave before it stops serving forwards.
+const leaveDelay = 2 * time.Second
+
 func main() {
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -45,15 +48,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv, clusterCleanup := buildServer(cfg, store, logger, m)
+	srv, join, shutdown := buildServer(cfg, store, logger, m)
 
 	if err := srv.Start(context.Background()); err != nil {
-		clusterCleanup()
+		shutdown()
 		if closeErr := store.Close(); closeErr != nil {
 			logger.Error("close storage", "err", closeErr)
 		}
 		_ = metricsLis.Close()
 		logger.Error("start server", "err", err)
+		os.Exit(1)
+	}
+	// Register in the ring only once the server is serving, so peers never forward to a closed port.
+	if err := join(context.Background()); err != nil {
+		shutdown()
+		if closeErr := store.Close(); closeErr != nil {
+			logger.Error("close storage", "err", closeErr)
+		}
+		_ = metricsLis.Close()
+		logger.Error("start membership", "err", err)
 		os.Exit(1)
 	}
 	logger.Info("rune listening", "port", cfg.Port, "cluster", len(cfg.EtcdEndpoints) > 0)
@@ -74,8 +87,7 @@ func main() {
 	<-quit
 
 	logger.Info("shutting down")
-	srv.Stop()
-	clusterCleanup()
+	shutdown()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
@@ -86,9 +98,12 @@ func main() {
 	}
 }
 
-func buildServer(cfg *config.Config, store storage.Storage, logger *logging.Logger, m *telemetry.Metrics) (*server.Server, func()) {
+// buildServer returns the server, a join func that registers this node in the
+// ring (call after srv.Start), and a shutdown func that stops everything in order.
+func buildServer(cfg *config.Config, store storage.Storage, logger *logging.Logger, m *telemetry.Metrics) (*server.Server, func(context.Context) error, func()) {
 	if len(cfg.EtcdEndpoints) == 0 {
-		return server.New(cfg, store, logger, nil, m), func() {}
+		srv := server.New(cfg, store, logger, nil, m)
+		return srv, func(context.Context) error { return nil }, srv.Stop
 	}
 
 	etcdClient, err := clientv3.New(clientv3.Config{
@@ -101,17 +116,15 @@ func buildServer(cfg *config.Config, store storage.Storage, logger *logging.Logg
 	}
 
 	membership := cluster.New(etcdClient, cfg.NodeID, cfg.NodeAddr, logger)
-	if err := membership.Start(context.Background()); err != nil {
-		_ = etcdClient.Close()
-		logger.Error("start membership", "err", err)
-		os.Exit(1)
-	}
-
 	dialer := cluster.NewPeerDialer()
-	cleanup := func() {
-		membership.Stop()
+	membership.OnPeerLeave = dialer.Forget
+	srv := server.New(cfg, store, logger, &server.ClusterOptions{Membership: membership, Dialer: dialer}, m)
+	shutdown := func() {
+		membership.Stop() // revokes the lease, so peers drop this node from their rings
+		time.Sleep(leaveDelay)
+		srv.Stop()
 		dialer.Close()
 		_ = etcdClient.Close()
 	}
-	return server.New(cfg, store, logger, &server.ClusterOptions{Membership: membership, Dialer: dialer}, m), cleanup
+	return srv, membership.Start, shutdown
 }

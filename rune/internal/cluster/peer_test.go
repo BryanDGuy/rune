@@ -74,3 +74,18 @@ func TestPeerDialerConcurrentDial(t *testing.T) {
 		assert.Same(t, conns[0], c)
 	}
 }
+
+func TestPeerDialerForgetRedials(t *testing.T) {
+	d := NewPeerDialer()
+	defer d.Close()
+
+	opts := &DialOptions{ContextDialer: noopContextDialer}
+	conn1, err := d.Dial("host1:7946", opts)
+	require.NoError(t, err)
+
+	d.Forget("host1:7946")
+
+	conn2, err := d.Dial("host1:7946", opts)
+	require.NoError(t, err)
+	assert.NotSame(t, conn1, conn2, "a departed peer must get a fresh connection when it rejoins")
+}
