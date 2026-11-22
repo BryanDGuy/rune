@@ -297,6 +297,9 @@ func clusterSet(ctx context.Context, c *Client, key string, r io.Reader, opts *S
 			},
 		},
 	}); err != nil {
+		if errors.Is(err, io.EOF) { // the server ended the stream; its status comes from Recv
+			_, err = stream.CloseAndRecv()
+		}
 		return nil, err
 	}
 
@@ -307,6 +310,9 @@ func clusterSet(ctx context.Context, c *Client, key string, r io.Reader, opts *S
 			if err = stream.Send(&runev1.SetRequest{
 				Payload: &runev1.SetRequest_Chunk{Chunk: buf[:n]},
 			}); err != nil {
+				if errors.Is(err, io.EOF) {
+					_, err = stream.CloseAndRecv()
+				}
 				return nil, err
 			}
 		}

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"time"
 
 	runev1 "github.com/bryandguy/rune/sdk/go/gen/rune/v1"
 	"google.golang.org/grpc"
@@ -27,60 +26,7 @@ func NewClient(conn *grpc.ClientConn) *Client {
 
 // Chunked via client-streaming gRPC in 1MB pieces.
 func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts *SetOptions) error {
-	var ttl time.Duration
-	var callOpts []grpc.CallOption
-	if opts != nil {
-		ttl = opts.TTL
-		if opts.Compress {
-			callOpts = append(callOpts, grpc.UseCompressor("gzip"))
-		}
-	}
-	if ttl < 0 {
-		return errors.New("runesdk: negative TTL")
-	}
-	ttlSeconds := int64(ttl.Seconds())
-	if ttl > 0 {
-		ttlSeconds = max(ttlSeconds, 1) // the protocol has whole seconds; 0 means no expiry
-	}
-
-	// Canceling on any early return aborts the stream, so the server never commits a partial value.
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	stream, err := c.grpc.Set(ctx, callOpts...)
-	if err != nil {
-		return err
-	}
-
-	if err = stream.Send(&runev1.SetRequest{
-		Payload: &runev1.SetRequest_Header{
-			Header: &runev1.SetHeader{
-				Key:        key,
-				TtlSeconds: ttlSeconds,
-			},
-		},
-	}); err != nil {
-		return err
-	}
-
-	buf := make([]byte, chunkSize)
-	for {
-		n, readErr := r.Read(buf)
-		if n > 0 {
-			if err = stream.Send(&runev1.SetRequest{
-				Payload: &runev1.SetRequest_Chunk{Chunk: buf[:n]},
-			}); err != nil {
-				return err
-			}
-		}
-		if errors.Is(readErr, io.EOF) {
-			break
-		}
-		if readErr != nil {
-			return readErr
-		}
-	}
-
-	_, err = stream.CloseAndRecv()
+	_, err := clusterSet(ctx, c, key, r, opts)
 	return err
 }
 

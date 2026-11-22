@@ -16,6 +16,8 @@ import (
 	"github.com/bryandguy/rune/sdk/go/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // cacheClient is the Set/Get surface shared by Client and ClusterClient.
@@ -25,11 +27,11 @@ type cacheClient interface {
 }
 
 // eachClient returns a plain Client and a ClusterClient, each on its own server.
-func eachClient(t *testing.T) map[string]cacheClient {
+func eachClient(t *testing.T, opts *testutil.BufconnOptions) map[string]cacheClient {
 	t.Helper()
-	conn1, stop1 := testutil.NewBufconnConn(t, 1<<20, nil)
+	conn1, stop1 := testutil.NewBufconnConn(t, 1<<20, opts)
 	t.Cleanup(stop1)
-	conn2, stop2 := testutil.NewBufconnConn(t, 1<<20, nil)
+	conn2, stop2 := testutil.NewBufconnConn(t, 1<<20, opts)
 	t.Cleanup(stop2)
 	cc, err := runesdk.NewClusterClient([]string{conn2.Target()}, &runesdk.ClusterOptions{
 		Dial: dialFrom(map[string]*runesdk.Client{conn2.Target(): runesdk.NewClient(conn2)}),
@@ -42,7 +44,7 @@ func eachClient(t *testing.T) map[string]cacheClient {
 // A body cut short of its Content-Length returns io.ErrUnexpectedEOF from net/http.
 // Set must fail and must not commit the partial value.
 func TestSetTruncatedUpstreamIsNotCommitted(t *testing.T) {
-	for name, c := range eachClient(t) {
+	for name, c := range eachClient(t, nil) {
 		t.Run(name, func(t *testing.T) {
 			full := bytes.Repeat([]byte("x"), 3<<20)
 			up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -85,7 +87,7 @@ func blockedSetHandlers() int {
 
 // A reader error must abort the stream so the server handler is released.
 func TestSetReaderErrorReleasesServerHandler(t *testing.T) {
-	for name, c := range eachClient(t) {
+	for name, c := range eachClient(t, nil) {
 		t.Run(name, func(t *testing.T) {
 			require.Error(t, c.Set(context.Background(), "k", &failingReader{}, nil))
 			time.Sleep(time.Second) // give a leaked handler time to start, so 0 is meaningful
@@ -95,7 +97,7 @@ func TestSetReaderErrorReleasesServerHandler(t *testing.T) {
 }
 
 func TestSetSubSecondTTLExpires(t *testing.T) {
-	for name, c := range eachClient(t) {
+	for name, c := range eachClient(t, nil) {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
 			require.NoError(t, c.Set(ctx, "k", strings.NewReader("v"), &runesdk.SetOptions{TTL: 500 * time.Millisecond}))
@@ -107,7 +109,7 @@ func TestSetSubSecondTTLExpires(t *testing.T) {
 }
 
 func TestSetNegativeTTLRejected(t *testing.T) {
-	for name, c := range eachClient(t) {
+	for name, c := range eachClient(t, nil) {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
 			require.Error(t, c.Set(ctx, "k", strings.NewReader("v"), &runesdk.SetOptions{TTL: -time.Second}))
@@ -116,3 +118,17 @@ func TestSetNegativeTTLRejected(t *testing.T) {
 		})
 	}
 }
+
+// When the server rejects a Set mid-stream, the caller must see the server's status, not a bare EOF.
+func TestSetReturnsServerStatusOnMidStreamReject(t *testing.T) {
+	for name, c := range eachClient(t, &testutil.BufconnOptions{MaxValueBytes: 1}) {
+		t.Run(name, func(t *testing.T) {
+			err := c.Set(context.Background(), "k", io.LimitReader(zeroReader{}, 64<<20), nil)
+			require.Equal(t, codes.ResourceExhausted, status.Code(err), "got %v", err)
+		})
+	}
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) { clear(p); return len(p), nil }

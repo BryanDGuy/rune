@@ -28,6 +28,8 @@ type BufconnOptions struct {
 	// ForwardTo makes this server forward all key operations to the given peer
 	// and set x-rune-owner to the peer's target address.
 	ForwardTo *grpc.ClientConn
+	// MaxValueBytes makes Set fail with ResourceExhausted once a value exceeds it.
+	MaxValueBytes int
 }
 
 // NewBufconnConn starts a minimal in-process Rune server and returns a dialed
@@ -41,6 +43,9 @@ func NewBufconnConn(t *testing.T, bufSize int, opts *BufconnOptions) (*grpc.Clie
 	srv := &memServer{store: make(map[string][]byte), expiry: make(map[string]time.Time), addr: addr}
 	if opts != nil && opts.ForwardTo != nil {
 		srv.forward = opts.ForwardTo
+	}
+	if opts != nil {
+		srv.maxValue = opts.MaxValueBytes
 	}
 
 	grpcSrv := grpc.NewServer()
@@ -65,11 +70,12 @@ func NewBufconnConn(t *testing.T, bufSize int, opts *BufconnOptions) (*grpc.Clie
 
 type memServer struct {
 	runev1.UnimplementedRuneServiceServer
-	store   map[string][]byte
-	expiry  map[string]time.Time
-	forward *grpc.ClientConn
-	addr    string
-	mu      sync.RWMutex
+	store    map[string][]byte
+	expiry   map[string]time.Time
+	forward  *grpc.ClientConn
+	addr     string
+	maxValue int
+	mu       sync.RWMutex
 }
 
 func (s *memServer) ownerAddr() string {
@@ -146,6 +152,9 @@ func (s *memServer) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, run
 			ttl = p.Header.TtlSeconds
 		case *runev1.SetRequest_Chunk:
 			val = append(val, p.Chunk...)
+			if s.maxValue > 0 && len(val) > s.maxValue {
+				return status.Error(codes.ResourceExhausted, "value too large")
+			}
 		}
 	}
 	s.mu.Lock()
