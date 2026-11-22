@@ -1,8 +1,11 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -119,7 +122,9 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 	if v := os.Getenv("RUNE_ETCD_ENDPOINTS"); v != "" {
-		cfg.EtcdEndpoints = strings.Split(v, ",")
+		for e := range strings.SplitSeq(v, ",") {
+			cfg.EtcdEndpoints = append(cfg.EtcdEndpoints, strings.TrimSpace(e))
+		}
 	}
 	hostname, _ := os.Hostname()
 	cfg.NodeID = hostname
@@ -130,7 +135,42 @@ func LoadConfig() (*Config, error) {
 	if v := os.Getenv("RUNE_NODE_ADDR"); v != "" {
 		cfg.NodeAddr = v
 	}
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 	return cfg, nil
+}
+
+// Validate rejects values that would hang, crash or silently split the cluster at runtime.
+func (c *Config) Validate() error {
+	var errs []error
+	if len(c.EtcdEndpoints) > 0 {
+		host, _, err := net.SplitHostPort(c.NodeAddr)
+		ip := net.ParseIP(host)
+		if err != nil || host == "" || strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback()) {
+			errs = append(errs, fmt.Errorf("RUNE_NODE_ADDR %q: cluster mode needs a host:port peers can reach, not empty or loopback", c.NodeAddr))
+		}
+		if slices.Contains(c.EtcdEndpoints, "") {
+			errs = append(errs, errors.New("RUNE_ETCD_ENDPOINTS: contains an empty endpoint"))
+		}
+	}
+	// Below gRPC's default 4 MiB receive limit, which also counts message framing.
+	if c.StreamChunkSize <= 0 || c.StreamChunkSize >= 4*1024*1024 {
+		errs = append(errs, fmt.Errorf("RUNE_STREAM_CHUNK_SIZE %d: must be in (0, 4MiB)", c.StreamChunkSize))
+	}
+	if c.GCInterval < time.Second {
+		errs = append(errs, fmt.Errorf("RUNE_GC_INTERVAL %s: must be at least 1s", c.GCInterval))
+	}
+	if c.GCDiscardRatio <= 0 || c.GCDiscardRatio >= 1 {
+		errs = append(errs, fmt.Errorf("RUNE_GC_DISCARD_RATIO %g: must be in (0, 1)", c.GCDiscardRatio))
+	}
+	if c.EvictionThreshold <= 0 || c.EvictionThreshold > 1 {
+		errs = append(errs, fmt.Errorf("RUNE_EVICTION_THRESHOLD %g: must be in (0, 1]", c.EvictionThreshold))
+	}
+	if c.MaxStorageBytes <= 0 {
+		errs = append(errs, fmt.Errorf("RUNE_MAX_STORAGE %d: must be > 0", c.MaxStorageBytes))
+	}
+	return errors.Join(errs...)
 }
 
 func parseBytes(s string) (int64, error) {

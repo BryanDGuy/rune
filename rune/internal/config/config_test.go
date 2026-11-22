@@ -59,6 +59,7 @@ func TestParseBytes(t *testing.T) {
 
 func TestConfigEtcdEndpoints(t *testing.T) {
 	t.Setenv("RUNE_ETCD_ENDPOINTS", "etcd1:2379,etcd2:2379")
+	t.Setenv("RUNE_NODE_ADDR", "rune-0:7946")
 	cfg, err := LoadConfig()
 	require.NoError(t, err)
 	assert.Equal(t, []string{"etcd1:2379", "etcd2:2379"}, cfg.EtcdEndpoints)
@@ -121,4 +122,47 @@ func TestMetricsPortEnvOverride(t *testing.T) {
 	cfg, err := LoadConfig()
 	require.NoError(t, err)
 	assert.Equal(t, 8080, cfg.MetricsPort)
+}
+
+func TestLoadConfigRejectsInvalidValues(t *testing.T) {
+	cases := map[string]map[string]string{
+		"cluster without node addr":   {"RUNE_ETCD_ENDPOINTS": "etcd:2379"},
+		"cluster with localhost addr": {"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": "localhost:7946"},
+		"cluster with 127.0.0.1 addr": {"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": "127.0.0.1:7946"},
+		"cluster with ::1 addr":       {"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": "[::1]:7946"},
+		"cluster with empty host":     {"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": ":7946"},
+		"cluster with no port":        {"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": "rune-0"},
+		"empty etcd endpoint":         {"RUNE_ETCD_ENDPOINTS": "etcd:2379,", "RUNE_NODE_ADDR": "rune-0:7946"},
+		"chunk size zero":             {"RUNE_STREAM_CHUNK_SIZE": "0"},
+		"chunk size negative":         {"RUNE_STREAM_CHUNK_SIZE": "-1"},
+		"chunk size 4MiB":             {"RUNE_STREAM_CHUNK_SIZE": "4194304"},
+		"gc interval zero":            {"RUNE_GC_INTERVAL": "0s"},
+		"gc interval sub-second":      {"RUNE_GC_INTERVAL": "500ms"},
+		"discard ratio zero":          {"RUNE_GC_DISCARD_RATIO": "0"},
+		"discard ratio one":           {"RUNE_GC_DISCARD_RATIO": "1"},
+		"threshold zero":              {"RUNE_EVICTION_THRESHOLD": "0"},
+		"threshold above one":         {"RUNE_EVICTION_THRESHOLD": "7"},
+		"max storage zero":            {"RUNE_MAX_STORAGE": "0"},
+		"max storage negative":        {"RUNE_MAX_STORAGE": "-5GB"},
+	}
+	for name, env := range cases {
+		t.Run(name, func(t *testing.T) {
+			for k, v := range env {
+				t.Setenv(k, v)
+			}
+			_, err := LoadConfig()
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestLoadConfigAcceptsBoundaryValues(t *testing.T) {
+	t.Setenv("RUNE_ETCD_ENDPOINTS", " etcd1:2379 , etcd2:2379")
+	t.Setenv("RUNE_NODE_ADDR", "rune-0.rune:7946")
+	t.Setenv("RUNE_STREAM_CHUNK_SIZE", "1")
+	t.Setenv("RUNE_GC_INTERVAL", "1s")
+	t.Setenv("RUNE_EVICTION_THRESHOLD", "1")
+	cfg, err := LoadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, []string{"etcd1:2379", "etcd2:2379"}, cfg.EtcdEndpoints)
 }
