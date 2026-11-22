@@ -99,11 +99,11 @@ func main() {
 }
 
 // buildServer returns the server, a join func that registers this node in the
-// ring (call after srv.Start), and a shutdown func that stops everything in order.
+// ring and marks it Ready (call after srv.Start), and a shutdown func that stops everything in order.
 func buildServer(cfg *config.Config, store storage.Storage, logger *logging.Logger, m *telemetry.Metrics) (*server.Server, func(context.Context) error, func()) {
 	if len(cfg.EtcdEndpoints) == 0 {
 		srv := server.New(cfg, store, logger, nil, m)
-		return srv, func(context.Context) error { return nil }, srv.Stop
+		return srv, func(context.Context) error { srv.MarkReady(); return nil }, srv.Stop
 	}
 
 	etcdClient, err := clientv3.New(clientv3.Config{
@@ -126,5 +126,12 @@ func buildServer(cfg *config.Config, store storage.Storage, logger *logging.Logg
 		dialer.Close()
 		_ = etcdClient.Close()
 	}
-	return srv, membership.Start, shutdown
+	join := func(ctx context.Context) error {
+		if err := membership.Start(ctx); err != nil {
+			return err
+		}
+		srv.MarkReady()
+		return nil
+	}
+	return srv, join, shutdown
 }

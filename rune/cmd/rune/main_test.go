@@ -14,10 +14,12 @@ import (
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	runev1 "github.com/bryandguy/rune/rune/internal/gen/rune/v1"
 	"github.com/bryandguy/rune/rune/internal/logging"
 	"github.com/bryandguy/rune/rune/internal/router"
+	"github.com/bryandguy/rune/rune/internal/server"
 	"github.com/bryandguy/rune/rune/internal/storage"
 	"github.com/bryandguy/rune/rune/test/testutil"
 )
@@ -167,4 +169,35 @@ func TestShutdownLeavesRingBeforeDraining(t *testing.T) {
 	require.Positive(t, sent.Load())
 	require.Zero(t, failures.Load(), "forwards via node-2 failed during node-1 shutdown (%d sent)", sent.Load())
 	n2.shutdown()
+}
+
+// TestReadyOnlyAfterJoin: a node must not report Ready until it has joined the ring,
+// or a hung join leaves it serving every key locally (G4 review #1).
+func TestReadyOnlyAfterJoin(t *testing.T) {
+	endpoint := startEtcd(t)
+	cfg := testutil.BaseConfig(t)
+	cfg.Port = freePort(t)
+	cfg.NodeID = "node-1"
+	cfg.NodeAddr = fmt.Sprintf("localhost:%d", cfg.Port)
+	cfg.EtcdEndpoints = []string{endpoint}
+	store, err := storage.NewBadgerStore(cfg, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = store.Close() })
+
+	srv, join, shutdown := buildServer(cfg, store, logging.Discard(), nil)
+	require.NoError(t, srv.Start(t.Context()))
+	t.Cleanup(shutdown)
+
+	conn, err := grpc.NewClient(cfg.NodeAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	readiness := func() healthpb.HealthCheckResponse_ServingStatus {
+		resp, checkErr := healthpb.NewHealthClient(conn).Check(t.Context(), &healthpb.HealthCheckRequest{Service: server.ReadinessService})
+		require.NoError(t, checkErr)
+		return resp.Status
+	}
+
+	require.Equal(t, healthpb.HealthCheckResponse_NOT_SERVING, readiness(), "not Ready before join")
+	require.NoError(t, join(t.Context()))
+	require.Equal(t, healthpb.HealthCheckResponse_SERVING, readiness(), "Ready after join")
 }

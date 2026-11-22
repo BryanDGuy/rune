@@ -252,3 +252,39 @@ func TestMembershipStopRevokesLease(t *testing.T) {
 	m.Stop()
 	assert.Empty(t, store.leases, "lease should be revoked on Stop")
 }
+
+func TestMembershipStopRemovesSelfFromRing(t *testing.T) {
+	store := newFakeStore()
+	info, _ := json.Marshal(router.Node{ID: "node-2", Addr: "host2:7946"})
+	store.kvs[router.NodeKeyPrefix+"node-2"] = string(info)
+
+	m := New(store, "node-1", "host1:7946", nil)
+	require.NoError(t, m.Start(t.Context()))
+	require.Equal(t, 2, m.Ring().Len())
+
+	m.Stop()
+
+	// The leaving node must route its former keys to the remaining owner during its drain.
+	require.Equal(t, 1, m.Ring().Len())
+	got, err := m.Ring().Lookup("any-key")
+	require.NoError(t, err)
+	assert.Equal(t, "node-2", got.ID)
+}
+
+// blockingGrantStore hangs on Grant until ctx ends, like an unreachable etcd.
+type blockingGrantStore struct{ *fakeStore }
+
+func (b blockingGrantStore) Grant(ctx context.Context, _ int64) (*clientv3.LeaseGrantResponse, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func TestMembershipStartTimesOut(t *testing.T) {
+	prev := startTimeout
+	startTimeout = 50 * time.Millisecond
+	defer func() { startTimeout = prev }()
+
+	m := New(blockingGrantStore{newFakeStore()}, "node-1", "host1:7946", nil)
+	err := m.Start(t.Context())
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}

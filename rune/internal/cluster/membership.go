@@ -20,6 +20,10 @@ const (
 	reregisterBackoff = time.Second
 )
 
+// startTimeout bounds Start's etcd calls so an unreachable etcd fails startup loudly.
+// A var only so tests can shorten it.
+var startTimeout = 30 * time.Second
+
 // etcdClient is the subset of *clientv3.Client methods used by Membership.
 // Tests inject a fake.
 type etcdClient interface {
@@ -72,15 +76,18 @@ func New(store etcdClient, nodeID, nodeAddr string, logger *logging.Logger) *Mem
 // ring from the current etcd state, then watches for changes in the background.
 func (m *Membership) Start(ctx context.Context) error {
 	ctx, m.cancel = context.WithCancel(ctx)
+	// Only the startup etcd calls are bounded; the background loops live on ctx.
+	initCtx, initCancel := context.WithTimeout(ctx, startTimeout)
+	defer initCancel()
 
 	if m.nodeAddr != "" {
-		if err := m.register(ctx); err != nil {
+		if err := m.register(ctx, initCtx); err != nil {
 			m.cancel()
 			return fmt.Errorf("register: %w", err)
 		}
 	}
 
-	rev, err := m.populate(ctx)
+	rev, err := m.populate(initCtx)
 	if err != nil {
 		m.cancel()
 		m.wg.Wait()
@@ -96,8 +103,8 @@ func (m *Membership) Start(ctx context.Context) error {
 	return nil
 }
 
-func (m *Membership) register(ctx context.Context) error {
-	if err := m.grantAndPut(ctx); err != nil {
+func (m *Membership) register(ctx, initCtx context.Context) error {
+	if err := m.grantAndPut(initCtx); err != nil {
 		return err
 	}
 	m.logger.Info("registered in cluster", "addr", m.nodeAddr, "lease", m.leaseID.Load())
@@ -259,6 +266,9 @@ func (m *Membership) Stop() {
 	}
 	m.wg.Wait()
 	if m.leaseID.Load() != 0 {
+		// The watch is already stopped, so drop self here: while draining, this node
+		// forwards its former keys to their new owners instead of serving them locally.
+		m.ring.Remove(m.nodeID)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_, _ = m.store.Revoke(ctx, clientv3.LeaseID(m.leaseID.Load()))
