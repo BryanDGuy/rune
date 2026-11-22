@@ -96,3 +96,14 @@ func (r *Router) Len() int {
 	defer r.mu.RUnlock()
 	return len(r.nodes)
 }
+
+// Nodes returns a snapshot of all ring members.
+func (r *Router) Nodes() []Node {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	nodes := make([]Node, 0, len(r.nodes))
+	for _, n := range r.nodes {
+		nodes = append(nodes, n)
+	}
+	return nodes
+}

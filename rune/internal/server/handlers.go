@@ -186,17 +186,59 @@ func (h *handler) forwardSet(ctx context.Context, peerAddr string, hdr *runev1.S
 	return stream.SendAndClose(&runev1.SetResponse{})
 }
 
-func (h *handler) Delete(_ context.Context, req *runev1.DeleteRequest) (*runev1.DeleteResponse, error) {
+// Delete removes keys locally and, on the client-facing node in cluster mode,
+// broadcasts to every other ring member so the owner and any orphan copies
+// (left by ring changes) are cleared. It returns OK only if every node succeeds.
+func (h *handler) Delete(ctx context.Context, req *runev1.DeleteRequest) (*runev1.DeleteResponse, error) {
 	if err := h.srv.store.Delete(req.Keys...); err != nil {
 		return nil, status.Errorf(codes.Internal, "delete: %v", err)
+	}
+	// owner() resolves no address unless we are the client-facing node in cluster mode.
+	if addr, _ := h.owner(ctx, ""); addr == "" {
+		return &runev1.DeleteResponse{}, nil
+	}
+	// shortcut: peers are contacted sequentially; parallelise if ring size makes latency matter.
+	for _, node := range h.srv.membership.Ring().Nodes() {
+		if node.ID == h.srv.membership.NodeID() {
+			continue
+		}
+		client, err := h.peerClient(node.Addr)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := client.Delete(forwardCtx(ctx), req); err != nil {
+			return nil, status.Errorf(codes.Unavailable, "peer delete %s: %v", node.ID, err)
+		}
 	}
 	return &runev1.DeleteResponse{}, nil
 }
 
-func (h *handler) Exists(_ context.Context, req *runev1.ExistsRequest) (*runev1.ExistsResponse, error) {
-	n, err := h.srv.store.Exists(req.Keys...)
+// Exists counts keys on their owners: local keys here, the rest forwarded to
+// each owner in one request per owner.
+func (h *handler) Exists(ctx context.Context, req *runev1.ExistsRequest) (*runev1.ExistsResponse, error) {
+	var local []string
+	remote := map[string][]string{}
+	for _, key := range req.Keys {
+		if addr, isRemote := h.owner(ctx, key); isRemote {
+			remote[addr] = append(remote[addr], key)
+		} else {
+			local = append(local, key)
+		}
+	}
+	n, err := h.srv.store.Exists(local...)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "exists: %v", err)
+	}
+	for addr, keys := range remote {
+		client, err := h.peerClient(addr)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := client.Exists(forwardCtx(ctx), &runev1.ExistsRequest{Keys: keys})
+		if err != nil {
+			return nil, status.Errorf(codes.Unavailable, "peer exists: %v", err)
+		}
+		n += resp.Count
 	}
 	return &runev1.ExistsResponse{Count: n}, nil
 }
