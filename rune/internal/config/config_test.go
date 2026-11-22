@@ -125,33 +125,38 @@ func TestMetricsPortEnvOverride(t *testing.T) {
 }
 
 func TestLoadConfigRejectsInvalidValues(t *testing.T) {
-	cases := map[string]map[string]string{
-		"cluster without node addr":   {"RUNE_ETCD_ENDPOINTS": "etcd:2379"},
-		"cluster with localhost addr": {"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": "localhost:7946"},
-		"cluster with 127.0.0.1 addr": {"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": "127.0.0.1:7946"},
-		"cluster with ::1 addr":       {"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": "[::1]:7946"},
-		"cluster with empty host":     {"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": ":7946"},
-		"cluster with no port":        {"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": "rune-0"},
-		"empty etcd endpoint":         {"RUNE_ETCD_ENDPOINTS": "etcd:2379,", "RUNE_NODE_ADDR": "rune-0:7946"},
-		"chunk size zero":             {"RUNE_STREAM_CHUNK_SIZE": "0"},
-		"chunk size negative":         {"RUNE_STREAM_CHUNK_SIZE": "-1"},
-		"chunk size 4MiB":             {"RUNE_STREAM_CHUNK_SIZE": "4194304"},
-		"gc interval zero":            {"RUNE_GC_INTERVAL": "0s"},
-		"gc interval sub-second":      {"RUNE_GC_INTERVAL": "500ms"},
-		"discard ratio zero":          {"RUNE_GC_DISCARD_RATIO": "0"},
-		"discard ratio one":           {"RUNE_GC_DISCARD_RATIO": "1"},
-		"threshold zero":              {"RUNE_EVICTION_THRESHOLD": "0"},
-		"threshold above one":         {"RUNE_EVICTION_THRESHOLD": "7"},
-		"max storage zero":            {"RUNE_MAX_STORAGE": "0"},
-		"max storage negative":        {"RUNE_MAX_STORAGE": "-5GB"},
+	cases := map[string]struct {
+		env  map[string]string
+		want string
+	}{
+		"cluster without node addr":   {map[string]string{"RUNE_ETCD_ENDPOINTS": "etcd:2379"}, "RUNE_NODE_ADDR"},
+		"cluster with localhost addr": {map[string]string{"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": "localhost:7946"}, "RUNE_NODE_ADDR"},
+		"cluster with 127.0.0.1 addr": {map[string]string{"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": "127.0.0.1:7946"}, "RUNE_NODE_ADDR"},
+		"cluster with ::1 addr":       {map[string]string{"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": "[::1]:7946"}, "RUNE_NODE_ADDR"},
+		"cluster with empty host":     {map[string]string{"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": ":7946"}, "RUNE_NODE_ADDR"},
+		"cluster with 0.0.0.0 addr":   {map[string]string{"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": "0.0.0.0:7946"}, "RUNE_NODE_ADDR"},
+		"cluster with [::] addr":      {map[string]string{"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": "[::]:7946"}, "RUNE_NODE_ADDR"},
+		"cluster with no port":        {map[string]string{"RUNE_ETCD_ENDPOINTS": "etcd:2379", "RUNE_NODE_ADDR": "rune-0"}, "RUNE_NODE_ADDR"},
+		"empty etcd endpoint":         {map[string]string{"RUNE_ETCD_ENDPOINTS": "etcd:2379,", "RUNE_NODE_ADDR": "rune-0:7946"}, "RUNE_ETCD_ENDPOINTS"},
+		"chunk size zero":             {map[string]string{"RUNE_STREAM_CHUNK_SIZE": "0"}, "RUNE_STREAM_CHUNK_SIZE"},
+		"chunk size negative":         {map[string]string{"RUNE_STREAM_CHUNK_SIZE": "-1"}, "RUNE_STREAM_CHUNK_SIZE"},
+		"chunk size 4194300":          {map[string]string{"RUNE_STREAM_CHUNK_SIZE": "4194300"}, "RUNE_STREAM_CHUNK_SIZE"},
+		"gc interval zero":            {map[string]string{"RUNE_GC_INTERVAL": "0s"}, "RUNE_GC_INTERVAL"},
+		"gc interval sub-second":      {map[string]string{"RUNE_GC_INTERVAL": "500ms"}, "RUNE_GC_INTERVAL"},
+		"discard ratio zero":          {map[string]string{"RUNE_GC_DISCARD_RATIO": "0"}, "RUNE_GC_DISCARD_RATIO"},
+		"discard ratio one":           {map[string]string{"RUNE_GC_DISCARD_RATIO": "1"}, "RUNE_GC_DISCARD_RATIO"},
+		"threshold zero":              {map[string]string{"RUNE_EVICTION_THRESHOLD": "0"}, "RUNE_EVICTION_THRESHOLD"},
+		"threshold above one":         {map[string]string{"RUNE_EVICTION_THRESHOLD": "7"}, "RUNE_EVICTION_THRESHOLD"},
+		"max storage zero":            {map[string]string{"RUNE_MAX_STORAGE": "0"}, "RUNE_MAX_STORAGE"},
+		"max storage negative":        {map[string]string{"RUNE_MAX_STORAGE": "-5GB"}, "RUNE_MAX_STORAGE"},
 	}
-	for name, env := range cases {
+	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			for k, v := range env {
+			for k, v := range c.env {
 				t.Setenv(k, v)
 			}
 			_, err := LoadConfig()
-			assert.Error(t, err)
+			assert.ErrorContains(t, err, c.want)
 		})
 	}
 }
@@ -160,6 +165,10 @@ func TestLoadConfigAcceptsBoundaryValues(t *testing.T) {
 	t.Setenv("RUNE_ETCD_ENDPOINTS", " etcd1:2379 , etcd2:2379")
 	t.Setenv("RUNE_NODE_ADDR", "rune-0.rune:7946")
 	t.Setenv("RUNE_STREAM_CHUNK_SIZE", "1")
+	_, err := LoadConfig()
+	require.NoError(t, err)
+
+	t.Setenv("RUNE_STREAM_CHUNK_SIZE", "4194299")
 	t.Setenv("RUNE_GC_INTERVAL", "1s")
 	t.Setenv("RUNE_EVICTION_THRESHOLD", "1")
 	cfg, err := LoadConfig()

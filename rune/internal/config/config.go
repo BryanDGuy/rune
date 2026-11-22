@@ -147,16 +147,16 @@ func (c *Config) Validate() error {
 	if len(c.EtcdEndpoints) > 0 {
 		host, _, err := net.SplitHostPort(c.NodeAddr)
 		ip := net.ParseIP(host)
-		if err != nil || host == "" || strings.EqualFold(host, "localhost") || (ip != nil && ip.IsLoopback()) {
-			errs = append(errs, fmt.Errorf("RUNE_NODE_ADDR %q: cluster mode needs a host:port peers can reach, not empty or loopback", c.NodeAddr))
+		if err != nil || host == "" || strings.EqualFold(host, "localhost") || (ip != nil && (ip.IsLoopback() || ip.IsUnspecified())) {
+			errs = append(errs, fmt.Errorf("RUNE_NODE_ADDR %q: cluster mode needs a host:port peers can reach, not empty, loopback or unspecified", c.NodeAddr))
 		}
 		if slices.Contains(c.EtcdEndpoints, "") {
 			errs = append(errs, errors.New("RUNE_ETCD_ENDPOINTS: contains an empty endpoint"))
 		}
 	}
-	// Below gRPC's default 4 MiB receive limit, which also counts message framing.
-	if c.StreamChunkSize <= 0 || c.StreamChunkSize >= 4*1024*1024 {
-		errs = append(errs, fmt.Errorf("RUNE_STREAM_CHUNK_SIZE %d: must be in (0, 4MiB)", c.StreamChunkSize))
+	// gRPC's 4 MiB default recv limit counts the proto tag (1 B) + length varint (4 B).
+	if c.StreamChunkSize <= 0 || c.StreamChunkSize > 4<<20-5 {
+		errs = append(errs, fmt.Errorf("RUNE_STREAM_CHUNK_SIZE %d: must be in (0, 4194299]", c.StreamChunkSize))
 	}
 	if c.GCInterval < time.Second {
 		errs = append(errs, fmt.Errorf("RUNE_GC_INTERVAL %s: must be at least 1s", c.GCInterval))
