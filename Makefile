@@ -93,18 +93,18 @@ vet-sdk:
 fix-check: fix-check-rune fix-check-sdk
 
 fix-check-rune:
-	@pkgs=$$(go list ./rune/... | grep -v /rune/internal/gen/); [ -z "$$pkgs" ] || go fix -diff $$pkgs
+	@pkgs=$$(go list ./rune/...); [ -z "$$pkgs" ] || go fix -diff $$pkgs
 
 fix-check-sdk:
-	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/internal/gen/); [ -z "$$pkgs" ] || go fix -diff $$pkgs
+	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/gen/); [ -z "$$pkgs" ] || go fix -diff $$pkgs
 
 fix: fix-rune fix-sdk
 
 fix-rune:
-	@pkgs=$$(go list ./rune/... | grep -v /rune/internal/gen/); [ -z "$$pkgs" ] || go fix $$pkgs
+	@pkgs=$$(go list ./rune/...); [ -z "$$pkgs" ] || go fix $$pkgs
 
 fix-sdk:
-	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/internal/gen/); [ -z "$$pkgs" ] || go fix $$pkgs
+	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/gen/); [ -z "$$pkgs" ] || go fix $$pkgs
 
 # Local 3-node cluster + etcd via docker-compose (nodes on host ports 7946/7947/7948).
 cluster-up:

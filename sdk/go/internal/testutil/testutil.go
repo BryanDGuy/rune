@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	runev1 "github.com/bryandguy/rune/sdk/go/internal/gen/rune/v1"
+	runev1 "github.com/bryandguy/rune/sdk/go/gen/rune/v1"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
