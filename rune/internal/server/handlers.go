@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"time"
 
 	"github.com/bryandguy/rune/rune/internal/storage"
 	runev1 "github.com/bryandguy/rune/sdk/go/gen/rune/v1"
@@ -16,6 +17,10 @@ import (
 const (
 	metaForwarded = "x-rune-forwarded"
 	metaOwner     = "x-rune-owner"
+
+	// peerTimeout bounds each Delete/Exists call to a peer, so a silently dead
+	// peer can't hang the request until the TCP timeout.
+	peerTimeout = 3 * time.Second
 )
 
 type handler struct {
@@ -206,7 +211,10 @@ func (h *handler) Delete(ctx context.Context, req *runev1.DeleteRequest) (*runev
 		if err != nil {
 			return nil, err
 		}
-		if _, err := client.Delete(forwardCtx(ctx), req); err != nil {
+		peerCtx, cancel := context.WithTimeout(forwardCtx(ctx), peerTimeout)
+		_, err = client.Delete(peerCtx, req)
+		cancel()
+		if err != nil {
 			return nil, status.Errorf(codes.Unavailable, "peer delete %s: %v", node.ID, err)
 		}
 	}
@@ -234,7 +242,9 @@ func (h *handler) Exists(ctx context.Context, req *runev1.ExistsRequest) (*runev
 		if err != nil {
 			return nil, err
 		}
-		resp, err := client.Exists(forwardCtx(ctx), &runev1.ExistsRequest{Keys: keys})
+		peerCtx, cancel := context.WithTimeout(forwardCtx(ctx), peerTimeout)
+		resp, err := client.Exists(peerCtx, &runev1.ExistsRequest{Keys: keys})
+		cancel()
 		if err != nil {
 			return nil, status.Errorf(codes.Unavailable, "peer exists: %v", err)
 		}

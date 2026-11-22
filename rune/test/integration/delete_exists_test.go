@@ -3,14 +3,18 @@ package integration_test
 import (
 	"context"
 	"fmt"
+	"net"
+	"slices"
 	"testing"
 	"time"
 
 	runev1 "github.com/bryandguy/rune/rune/internal/gen/rune/v1"
+	"github.com/bryandguy/rune/rune/internal/router"
 	"github.com/bryandguy/rune/rune/test/testutil"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -53,7 +57,7 @@ func TestIntegrationClusterDeleteExistsRouting(t *testing.T) {
 
 	// Exists via each node returns the true count.
 	for i, c := range conns {
-		resp, err := runev1.NewRuneServiceClient(c).Exists(ctx, &runev1.ExistsRequest{Keys: append(keys, "missing")})
+		resp, err := runev1.NewRuneServiceClient(c).Exists(ctx, &runev1.ExistsRequest{Keys: slices.Concat(keys, []string{"missing"})})
 		require.NoError(t, err)
 		require.EqualValues(t, 3, resp.Count, "exists via node-%d", i)
 	}
@@ -82,7 +86,67 @@ func TestIntegrationClusterDeletePeerDown(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
+	start := time.Now()
 	_, err := runev1.NewRuneServiceClient(conns[0]).Delete(ctx, &runev1.DeleteRequest{Keys: []string{"any"}})
 	require.Error(t, err)
-	require.NotEqual(t, codes.DeadlineExceeded, status.Code(err), "should fail fast, not hang")
+	require.Less(t, time.Since(start), 2*time.Second, "should fail fast, not hang")
+}
+
+// TestIntegrationClusterPeerHangs: a ring member that accepts TCP but never
+// answers must not hang Delete or Exists past the per-peer timeout.
+func TestIntegrationClusterPeerHangs(t *testing.T) {
+	conns, ring, _ := testutil.NewBufconnCluster(t, 2)
+	lis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = lis.Close() })
+	ring.Add(router.Node{ID: "node-dead", Addr: lis.Addr().String()})
+
+	var deadKey string
+	for i := 0; deadKey == "" && i < 1000; i++ {
+		if n, _ := ring.Lookup(fmt.Sprintf("k-%d", i)); n.ID == "node-dead" {
+			deadKey = fmt.Sprintf("k-%d", i)
+		}
+	}
+	require.NotEmpty(t, deadKey)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	client := runev1.NewRuneServiceClient(conns[0])
+
+	start := time.Now()
+	_, err = client.Delete(ctx, &runev1.DeleteRequest{Keys: []string{"any"}})
+	require.Error(t, err)
+	require.Less(t, time.Since(start), 8*time.Second, "delete must give up on a hung peer")
+
+	start = time.Now()
+	_, err = client.Exists(ctx, &runev1.ExistsRequest{Keys: []string{deadKey}})
+	require.Error(t, err)
+	require.Less(t, time.Since(start), 8*time.Second, "exists must give up on a hung peer")
+}
+
+// TestIntegrationClusterDeleteClearsOrphan: a copy on a non-owner (left by a
+// ring change) is removed by a Delete sent through a third node.
+func TestIntegrationClusterDeleteClearsOrphan(t *testing.T) {
+	conns, ring, _ := testutil.NewBufconnCluster(t, 3)
+	n, err := ring.Lookup("orphan")
+	require.NoError(t, err)
+	var ownerIdx int
+	_, _ = fmt.Sscanf(n.ID, "node-%d", &ownerIdx)
+	orphanConn, viaConn := conns[(ownerIdx+1)%3], conns[(ownerIdx+2)%3]
+
+	// x-rune-forwarded makes the non-owner store locally instead of forwarding.
+	fwd := metadata.AppendToOutgoingContext(t.Context(), "x-rune-forwarded", "1")
+	ps, err := runev1.NewRuneServiceClient(orphanConn).Set(fwd)
+	require.NoError(t, err)
+	require.NoError(t, ps.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Header{Header: &runev1.SetHeader{Key: "orphan"}}}))
+	require.NoError(t, ps.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Chunk{Chunk: []byte("v")}}))
+	_, err = ps.CloseAndRecv()
+	require.NoError(t, err)
+
+	_, err = runev1.NewRuneServiceClient(viaConn).Delete(t.Context(), &runev1.DeleteRequest{Keys: []string{"orphan"}})
+	require.NoError(t, err)
+
+	resp, err := runev1.NewRuneServiceClient(orphanConn).Exists(fwd, &runev1.ExistsRequest{Keys: []string{"orphan"}})
+	require.NoError(t, err)
+	require.EqualValues(t, 0, resp.Count, "orphan copy must be deleted")
 }
