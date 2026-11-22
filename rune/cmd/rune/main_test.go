@@ -16,12 +16,12 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	runev1 "github.com/bryandguy/rune/rune/internal/gen/rune/v1"
 	"github.com/bryandguy/rune/rune/internal/logging"
 	"github.com/bryandguy/rune/rune/internal/router"
 	"github.com/bryandguy/rune/rune/internal/server"
 	"github.com/bryandguy/rune/rune/internal/storage"
 	"github.com/bryandguy/rune/rune/test/testutil"
+	runev1 "github.com/bryandguy/rune/sdk/go/gen/rune/v1"
 )
 
 func freePort(t *testing.T) int {
