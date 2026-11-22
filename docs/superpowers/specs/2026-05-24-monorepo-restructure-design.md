@@ -44,18 +44,17 @@ rune/                        ← repo root
 │   └── go/                  (module: github.com/bryandguy/rune/sdk/go)
 │       ├── go.mod
 │       ├── go.sum
-│       └── gen/rune/v1/     ← generated proto types (copied from api/gen by make proto); also imported by rune/
+│       └── gen/rune/v1/     ← generated proto types (make proto writes here); also imported by rune/
 │
-└── api/                  ← not a Go module; proto source and canonical generated output only
-    ├── gen/rune/v1/         ← canonical generated output; make proto writes here first
+└── api/                  ← not a Go module; proto source only
     └── proto/rune/v1/       ← .proto source definitions (single source of truth)
 ```
 
 `bin/` (build output) stays at root and is not moved.
 
-**Why no shared Go module:** Publishing a third Go module as a prerequisite for both `rune` and `sdk/go` adds release coordination overhead for what is just generated code. Instead, `make proto` generates into `api/gen/` then copies to `sdk/go/gen/`, the only Go copy. The server imports it from the SDK module (it already depended on the SDK for `runectl` and `bench`), with no cross-module `replace` directives. (Earlier the code was duplicated into `rune/internal/gen/` too, but protobuf's global registry panics when both copies are linked into one binary, e.g. `runectl` or a server test using the SDK.)
+**Why no shared Go module:** Publishing a third Go module as a prerequisite for both `rune` and `sdk/go` adds release coordination overhead for what is just generated code. Instead, `make proto` generates into `sdk/go/gen/`, the only Go copy. The server imports it from the SDK module (it already depended on the SDK for `runectl` and `bench`); until `sdk/go` has its own published version, `rune/go.mod` resolves it with `replace github.com/bryandguy/rune/sdk/go => ../sdk/go`. (Earlier the code was duplicated into `rune/internal/gen/` too, but protobuf's global registry panics when both copies are linked into one binary, e.g. `runectl` or a server test using the SDK.)
 
-**What belongs in api/:** Only the gRPC wire format — the `.proto` source and the canonical generated output. No hand-written Go logic lives there.
+**What belongs in api/:** Only the gRPC wire format — the `.proto` source. No hand-written Go logic lives there.
 
 **What belongs in rune/internal/:** Server implementation details — node registration, lease keepalive, peer dialing, consistent hash ring, logging. None of this is relevant to SDK consumers.
 
@@ -88,7 +87,7 @@ The `sdk/go` package path (`github.com/bryandguy/rune/sdk/go`) is unchanged.
 |--------|--------|
 | `build` | `./cmd/rune` → `./rune/cmd/rune` |
 | `bench` | `./cmd/bench/` → `./rune/cmd/bench/` |
-| `proto` | generates into `api/gen/`, then copies to `sdk/go/gen/` |
+| `proto` | generates into `sdk/go/gen/` |
 | `test` | alias for `test-rune test-sdk` |
 | `test-rune` | server tests, excluding integration |
 | `test-sdk` | `./sdk/go/...` |
