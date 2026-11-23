@@ -34,7 +34,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.work
-      - run: make modernize
+      - run: make fix-check
 
   lint:
     runs-on: ubuntu-latest
