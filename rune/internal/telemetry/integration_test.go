@@ -46,6 +46,7 @@ func TestIntegrationMetricsScrape(t *testing.T) {
 	assert.Contains(t, body, "rune_cache_hits_total 1")
 	assert.Contains(t, body, "rune_cache_misses_total 1")
 	assert.Contains(t, body, "rune_storage_used_bytes")
+	assert.Contains(t, body, "rune_disk_free_bytes")
 }
 
 // TestIntegrationGRPCMetrics verifies that gRPC server metrics appear in the

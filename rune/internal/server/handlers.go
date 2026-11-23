@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/bryandguy/rune/rune/internal/storage"
@@ -56,6 +57,16 @@ func setOwnerHint(stream grpc.ServerStream, addr string) {
 	}
 }
 
+// checkKeys refuses keys in storage's reserved namespace, which GC drops.
+func checkKeys(keys ...string) error {
+	for _, k := range keys {
+		if strings.HasPrefix(k, storage.ReservedKeyPrefix) {
+			return status.Errorf(codes.InvalidArgument, "key prefix %q is reserved", storage.ReservedKeyPrefix)
+		}
+	}
+	return nil
+}
+
 func forwardCtx(ctx context.Context) context.Context {
 	return metadata.AppendToOutgoingContext(ctx, metaForwarded, "1")
 }
@@ -65,6 +76,9 @@ func (h *handler) Ping(_ context.Context, _ *runev1.PingRequest) (*runev1.PingRe
 }
 
 func (h *handler) Get(req *runev1.GetRequest, stream grpc.ServerStreamingServer[runev1.GetResponse]) error {
+	if err := checkKeys(req.Key); err != nil {
+		return err
+	}
 	addr, remote := h.owner(stream.Context(), req.Key)
 	setOwnerHint(stream, addr)
 	if remote {
@@ -171,6 +185,9 @@ func (h *handler) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, runev
 	if hdr == nil {
 		return status.Error(codes.InvalidArgument, "first message must contain SetHeader")
 	}
+	if err := checkKeys(hdr.Key); err != nil {
+		return err
+	}
 
 	addr, remote := h.owner(stream.Context(), hdr.Key)
 	setOwnerHint(stream, addr)
@@ -215,7 +232,9 @@ func (h *handler) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, runev
 		value = append(value, chunk.Chunk...)
 	}
 
-	if err := h.srv.store.Set(key, value, ttl); err != nil {
+	if err := h.srv.store.Set(key, value, ttl); errors.Is(err, storage.ErrInsufficientStorage) {
+		return status.Errorf(codes.ResourceExhausted, "set: %v", err)
+	} else if err != nil {
 		return status.Errorf(codes.Internal, "set: %v", err)
 	}
 	return stream.SendAndClose(&runev1.SetResponse{})
@@ -260,6 +279,9 @@ func (h *handler) forwardSet(ctx context.Context, peerAddr string, hdr *runev1.S
 // (left by ring changes) are cleared. Every peer is tried even if one fails; it
 // returns OK only if every node succeeds.
 func (h *handler) Delete(ctx context.Context, req *runev1.DeleteRequest) (*runev1.DeleteResponse, error) {
+	if err := checkKeys(req.Keys...); err != nil {
+		return nil, err
+	}
 	if len(req.Keys) == 0 {
 		return &runev1.DeleteResponse{}, nil
 	}
@@ -301,6 +323,9 @@ func (h *handler) Delete(ctx context.Context, req *runev1.DeleteRequest) (*runev
 // Exists counts keys on their owners: local keys here, the rest forwarded to
 // each owner in one request per owner.
 func (h *handler) Exists(ctx context.Context, req *runev1.ExistsRequest) (*runev1.ExistsResponse, error) {
+	if err := checkKeys(req.Keys...); err != nil {
+		return nil, err
+	}
 	var local []string
 	remote := map[string][]string{}
 	for _, key := range req.Keys {

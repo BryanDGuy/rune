@@ -75,6 +75,8 @@ The reason: each key lives on one owning node. While a node is out of the ring, 
 
 Deleting a key and later setting it again with the same value is fine. Setting it again with a different value is not.
 
+**Reserved keys.** Keys starting with `"\x00rune/"` (a NUL byte, then `rune/`) are reserved for Rune's own use. Set, Get, Delete and Exists reject them with `InvalidArgument`.
+
 **Known limitation: a Delete can come back.** A Delete issued while the owning node is out of the ring goes to the fallback node. When the owner rejoins with its disk intact, it serves the deleted key again. Do not rely on Delete to purge or invalidate data. If a value must be gone, give it a TTL or stop using that key and write under a new one.
 
 ## Node identity and addresses
@@ -88,11 +90,27 @@ Deleting a key and later setting it again with the same value is fine. Setting i
 
 ### Disk
 
-The PVC (`64Gi`) must be larger than `RUNE_MAX_STORAGE` (`50GB`). In `RUNE_MAX_STORAGE`, `GB` means GiB (multiples of 1024). Write `50GB`, not `50Gi`: the Kubernetes-style suffix is rejected and the pod crash-loops.
+**Size the PVC at least 2 x `RUNE_MAX_STORAGE` + 2 GiB, on a dedicated volume.** The example uses `RUNE_MAX_STORAGE=30GB` on a `64Gi` PVC (2 x 30 + 2 = 62). In `RUNE_MAX_STORAGE`, `GB` means GiB (multiples of 1024). Write `30GB`, not `30Gi`: the Kubernetes-style suffix is rejected and the pod exits at startup.
 
-Rune does not check `RUNE_MAX_STORAGE` against the filesystem size, and eviction is based on Badger's on-disk size, which lags behind deletes until value-log GC runs. Leave headroom: the example keeps about 20 % of the volume free above the limit. A full disk is not handled gracefully.
+Why 2x: eviction keeps the *live* bytes (the keys currently stored) under `RUNE_EVICTION_THRESHOLD` x `RUNE_MAX_STORAGE`. Badger reclaims disk only when value-log GC rewrites a file, which with `RUNE_GC_DISCARD_RATIO=0.5` happens once half of it is dead. So disk use can reach about 2x the live bytes, plus one active 1 GiB value-log file and the LSM. The smallest practical volume is about **6 GiB**.
 
-Badger preallocates a sparse 2 GiB value-log file, and the size Rune uses for eviction counts it. With `RUNE_MAX_STORAGE` below about 2.5 GiB, the node is under eviction pressure from the start.
+Disk protection, in order:
+
+- If free disk on the volume drops below about 1.75 GiB (one value-log file plus GC headroom), Rune evicts until about 3.75 GiB is free, regardless of `RUNE_MAX_STORAGE`.
+- If a Set would leave less than about 0.75 GiB free (the space GC needs to rewrite a file), it is refused with `ResourceExhausted` and nothing is stored.
+- If `RUNE_MAX_STORAGE` is larger than the volume, Rune clamps it to the volume size and logs `WARN "RUNE_MAX_STORAGE exceeds filesystem size; clamped"` with `requested_bytes` and `effective_bytes`. On a volume sized by the 2x rule this never happens.
+
+Use a dedicated volume. Rune measures free space on the whole filesystem. If something else fills it, Rune evicts its cache (about 2 GiB per pass) and refuses writes, and it cannot recover that space.
+
+A refused Set returns `ResourceExhausted`, which callers treat as "not cached" (see the caller contract under "Memory"). Brief bursts of refusals can happen the first time a node's disk fills (measured: one burst of about 9-30 s), then rarely and for a few seconds. On a volume sized by the 2x rule, the disk-pressure path should not engage (not measured).
+
+**Alerts.**
+
+- `rune_disk_free_bytes`: free bytes on the data volume. Alert when it stays near or below the eviction mark (about 2 GiB) for several minutes. It reports `NaN` if statfs fails, and an alert written as `< X` does not fire on `NaN`, so also alert on `absent()` or `NaN`.
+- `rune_gc_flush_errors_total`: alert if it increases. A failed flush means GC cannot reclaim disk.
+- `rune_evictions_total`: watch its rate together with free disk.
+
+`rune_storage_used_bytes` and `Info` report Badger's on-disk size, which includes a 2 GiB sparse value-log file. Eviction does not use that number.
 
 ### Memory
 
@@ -101,7 +119,7 @@ Rune buffers each whole value in memory on Set and on Get. Two limits bound this
 - `RUNE_MAX_VALUE_BYTES` (default `512MB`, maximum `1073741823`, Badger's value limit): a larger Set fails with `ResourceExhausted` and nothing is stored.
 - `RUNE_MAX_INFLIGHT_BYTES` (default `2GB`, must be at least `RUNE_MAX_VALUE_BYTES`): a server-wide budget for buffered Set and Get value bytes. A request that would exceed it fails at once with `ResourceExhausted`; it does not wait. A Set is charged its buffer capacity, so with the defaults a node admits 4 concurrent Sets of 257-512 MB.
 
-**Caller contract: `ResourceExhausted` means "not cached".** Serve the value from its source and try caching it again later. Do not treat it as a fatal error.
+**Caller contract: `ResourceExhausted` means "not cached".** It comes from the memory budget and, on a Set, from low disk (see "Disk"). Serve the value from its source and try caching it again later. Do not treat it as a fatal error.
 
 If you lower `RUNE_MAX_INFLIGHT_BYTES` below the size of values already stored, a Get of such a value fails with `FailedPrecondition` (it can never fit, so retrying won't help) until the key expires or is evicted. Treat it like a miss.
 
@@ -146,7 +164,7 @@ All settings are environment variables. These are the ones that exist in this ve
 | `RUNE_METRICS_PORT` | `9090` | Prometheus metrics, served on all paths (scrape `/metrics`). |
 | `RUNE_DATA_DIR` | `/var/rune/data` | Mount the PVC here. |
 | `RUNE_LOG_LEVEL` | `info` | |
-| `RUNE_MAX_STORAGE` | `100GB` | Storage limit (KB/MB/GB/TB, base 1024). Keep below the PVC size. |
+| `RUNE_MAX_STORAGE` | `100GB` | Limit on live bytes (KB/MB/GB/TB, base 1024). Size the PVC at 2x this + 2 GiB; clamped to the volume size with a WARN. |
 | `RUNE_EVICTION_THRESHOLD` | `0.8` | Fraction of max storage before eviction starts. |
 | `RUNE_EVICTION_SIZE_WEIGHT` | `1.0` | Weight of value size in the eviction score. |
 | `RUNE_EVICTION_AGE_WEIGHT` | `1.0` | Weight of time since last access in the eviction score. |

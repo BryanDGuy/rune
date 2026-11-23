@@ -2,7 +2,14 @@ package storage
 
 import "errors"
 
-var ErrNotFound = errors.New("key not found")
+// ReservedKeyPrefix marks storage-internal keys. GC drops keys under it, so the
+// server refuses client keys that start with it.
+const ReservedKeyPrefix = "\x00rune/"
+
+var (
+	ErrNotFound            = errors.New("key not found")
+	ErrInsufficientStorage = errors.New("insufficient disk space")
+)
 
 // ErrOverBudget is returned by GetReserved when reserve refuses the value's size.
 var ErrOverBudget = errors.New("value does not fit the memory budget")
