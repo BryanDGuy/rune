@@ -1,6 +1,6 @@
 module github.com/bryandguy/rune/rune
 
-go 1.27.4
+go 1.27
 
 require (
 	github.com/bryandguy/rune v0.0.0-20260523144032-af834841b9a5
