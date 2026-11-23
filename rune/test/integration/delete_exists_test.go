@@ -99,13 +99,14 @@ func TestIntegrationClusterDeletePeerDown(t *testing.T) {
 
 // TestIntegrationClusterDeleteReachesAllLivePeers: one dead peer must not stop
 // the broadcast; every reachable copy is gone after a single Delete. Peer order
-// is random, so several rounds make a skipped peer near-certain to show up.
+// comes from map iteration and a stop-at-first-error bug shows in only ~1 round
+// in 4, so 50 rounds (~0.5s) miss it about once in 2 million runs.
 func TestIntegrationClusterDeleteReachesAllLivePeers(t *testing.T) {
 	conns, _, stops := testutil.NewBufconnCluster(t, 4)
 	stops[3]()
 	fwd := metadata.AppendToOutgoingContext(t.Context(), "x-rune-forwarded", "1")
 
-	for round := range 6 {
+	for round := range 50 {
 		for _, c := range conns[1:3] {
 			setLocal(t, c, "k")
 		}
