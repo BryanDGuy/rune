@@ -13,8 +13,8 @@ import (
 )
 
 // forgetCloseDelay outlives a departing peer's leave delay plus its 30 s drain,
-// so forwards already in flight on the old connection can finish.
-const forgetCloseDelay = 35 * time.Second
+// so forwards already in flight on the old connection can finish. A var only so tests can shorten it.
+var forgetCloseDelay = 35 * time.Second
 
 var errDialerClosed = errors.New("cluster: PeerDialer is closed")
 

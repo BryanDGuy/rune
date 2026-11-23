@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -147,7 +148,7 @@ func TestMembershipRegistersOnStart(t *testing.T) {
 	ctx := t.Context()
 
 	require.NoError(t, m.Start(ctx))
-	defer m.Stop()
+	defer func() { _ = m.Stop() }()
 
 	got, err := m.Ring().Lookup("any-key")
 	require.NoError(t, err)
@@ -165,7 +166,7 @@ func TestMembershipWatchOnlyMode(t *testing.T) {
 	ctx := t.Context()
 
 	require.NoError(t, m.Start(ctx))
-	defer m.Stop()
+	defer func() { _ = m.Stop() }()
 
 	got, err := m.Ring().Lookup("any-key")
 	require.NoError(t, err)
@@ -181,7 +182,7 @@ func TestMembershipRingUpdatesOnNodeJoin(t *testing.T) {
 	ctx := t.Context()
 
 	require.NoError(t, m.Start(ctx))
-	defer m.Stop()
+	defer func() { _ = m.Stop() }()
 
 	// Simulate node-2 joining.
 	info, _ := json.Marshal(router.Node{ID: "node-2", Addr: "host2:7946"})
@@ -204,7 +205,7 @@ func TestMembershipRingUpdatesOnNodeLeave(t *testing.T) {
 	ctx := t.Context()
 
 	require.NoError(t, m.Start(ctx))
-	defer m.Stop()
+	defer func() { _ = m.Stop() }()
 
 	require.Equal(t, 2, m.Ring().Len())
 
@@ -225,7 +226,7 @@ func TestMembershipReregistersOnLeaseLoss(t *testing.T) {
 	ctx := t.Context()
 
 	require.NoError(t, m.Start(ctx))
-	defer m.Stop()
+	defer func() { _ = m.Stop() }()
 
 	require.Equal(t, 1, store.grantCount())
 	require.Eventually(t, store.hasKeepAlive, time.Second, 5*time.Millisecond)
@@ -249,8 +250,21 @@ func TestMembershipStopRevokesLease(t *testing.T) {
 	require.NoError(t, m.Start(ctx))
 	assert.Len(t, store.leases, 1)
 
-	m.Stop()
+	require.NoError(t, m.Stop())
 	assert.Empty(t, store.leases, "lease should be revoked on Stop")
+}
+
+// failingRevokeStore fails Revoke, like an etcd this node can no longer reach.
+type failingRevokeStore struct{ *fakeStore }
+
+func (failingRevokeStore) Revoke(context.Context, clientv3.LeaseID) (*clientv3.LeaseRevokeResponse, error) {
+	return nil, errors.New("etcd unreachable")
+}
+
+func TestMembershipStopReportsRevokeFailure(t *testing.T) {
+	m := New(failingRevokeStore{newFakeStore()}, "node-1", "host1:7946", nil)
+	require.NoError(t, m.Start(t.Context()))
+	require.ErrorContains(t, m.Stop(), "etcd unreachable", "caller must know peers still list this node")
 }
 
 func TestMembershipStopRemovesSelfFromRing(t *testing.T) {
@@ -262,7 +276,7 @@ func TestMembershipStopRemovesSelfFromRing(t *testing.T) {
 	require.NoError(t, m.Start(t.Context()))
 	require.Equal(t, 2, m.Ring().Len())
 
-	m.Stop()
+	require.NoError(t, m.Stop())
 
 	// The leaving node must route its former keys to the remaining owner during its drain.
 	require.Equal(t, 1, m.Ring().Len())

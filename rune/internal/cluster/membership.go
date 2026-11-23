@@ -18,6 +18,8 @@ import (
 const (
 	leaseTTLSeconds   = 10
 	reregisterBackoff = time.Second
+	// LeaseTTL is how long peers keep this node in their rings if it stops without revoking its lease.
+	LeaseTTL = leaseTTLSeconds * time.Second
 )
 
 // startTimeout bounds Start's etcd calls so an unreachable etcd fails startup loudly.
@@ -39,7 +41,6 @@ type etcdClient interface {
 type MembershipIface interface {
 	Ring() *router.Router
 	NodeID() string
-	Stop()
 }
 
 // Membership watches etcd for node join/leave events and keeps a router.Router current.
@@ -260,17 +261,21 @@ func (m *Membership) NodeID() string {
 	return m.nodeID
 }
 
-func (m *Membership) Stop() {
+// Stop ends the watch and leaves the ring. A non-nil error means the lease revoke
+// failed, so peers keep this node in their rings for up to LeaseTTL.
+func (m *Membership) Stop() error {
 	if m.cancel != nil {
 		m.cancel()
 	}
 	m.wg.Wait()
-	if m.leaseID.Load() != 0 {
-		// The watch is already stopped, so drop self here: while draining, this node
-		// forwards its former keys to their new owners instead of serving them locally.
-		m.ring.Remove(m.nodeID)
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_, _ = m.store.Revoke(ctx, clientv3.LeaseID(m.leaseID.Load()))
+	if m.leaseID.Load() == 0 {
+		return nil
 	}
+	// The watch is already stopped, so drop self here: while draining, this node
+	// forwards its former keys to their new owners instead of serving them locally.
+	m.ring.Remove(m.nodeID)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := m.store.Revoke(ctx, clientv3.LeaseID(m.leaseID.Load()))
+	return err
 }

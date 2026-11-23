@@ -49,25 +49,22 @@ func main() {
 	}
 
 	srv, join, shutdown := buildServer(cfg, store, logger, m)
-
-	if err := srv.Start(context.Background()); err != nil {
+	fail := func(msg string, err error) {
 		shutdown()
 		if closeErr := store.Close(); closeErr != nil {
 			logger.Error("close storage", "err", closeErr)
 		}
 		_ = metricsLis.Close()
-		logger.Error("start server", "err", err)
+		logger.Error(msg, "err", err)
 		os.Exit(1)
+	}
+
+	if err := srv.Start(context.Background()); err != nil {
+		fail("start server", err)
 	}
 	// Register in the ring only once the server is serving, so peers never forward to a closed port.
 	if err := join(context.Background()); err != nil {
-		shutdown()
-		if closeErr := store.Close(); closeErr != nil {
-			logger.Error("close storage", "err", closeErr)
-		}
-		_ = metricsLis.Close()
-		logger.Error("start membership", "err", err)
-		os.Exit(1)
+		fail("start membership", err)
 	}
 	logger.Info("rune listening", "port", cfg.Port, "cluster", len(cfg.EtcdEndpoints) > 0)
 
@@ -85,6 +82,7 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
 	<-quit
+	signal.Stop(quit) // a second SIGTERM/Ctrl-C kills the process instead of waiting out the drain
 
 	logger.Info("shutting down")
 	shutdown()
@@ -119,9 +117,17 @@ func buildServer(cfg *config.Config, store storage.Storage, logger *logging.Logg
 	dialer := cluster.NewPeerDialer()
 	membership.OnPeerLeave = dialer.Forget
 	srv := server.New(cfg, store, logger, &server.ClusterOptions{Membership: membership, Dialer: dialer}, m)
+	joined := false
 	shutdown := func() {
-		membership.Stop() // revokes the lease, so peers drop this node from their rings
-		time.Sleep(leaveDelay)
+		// Stop revokes the lease, so peers drop this node from their rings.
+		switch err := membership.Stop(); {
+		case err != nil:
+			// Peers keep this node until its lease expires; keep serving until then.
+			logger.Warn("lease revoke failed; waiting for lease expiry", "err", err)
+			time.Sleep(cluster.LeaseTTL + leaveDelay)
+		case joined:
+			time.Sleep(leaveDelay)
+		}
 		srv.Stop()
 		dialer.Close()
 		_ = etcdClient.Close()
@@ -130,6 +136,7 @@ func buildServer(cfg *config.Config, store storage.Storage, logger *logging.Logg
 		if err := membership.Start(ctx); err != nil {
 			return err
 		}
+		joined = true
 		srv.MarkReady()
 		return nil
 	}

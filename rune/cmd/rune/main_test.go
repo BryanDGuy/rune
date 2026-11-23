@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -99,6 +101,92 @@ func set(ctx context.Context, c runev1.RuneServiceClient, key string) error {
 	return err
 }
 
+// tcpProxy forwards TCP to target until cut closes the listener and every open connection.
+func tcpProxy(t *testing.T, target string) (addr string, cut func()) {
+	t.Helper()
+	lis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "localhost:0")
+	require.NoError(t, err)
+	var mu sync.Mutex
+	var conns []net.Conn
+	closed := false
+	go func() {
+		for {
+			c, err := lis.Accept()
+			if err != nil {
+				return
+			}
+			u, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", target)
+			if err != nil {
+				_ = c.Close()
+				continue
+			}
+			mu.Lock()
+			if closed {
+				_, _ = c.Close(), u.Close()
+			}
+			conns = append(conns, c, u)
+			mu.Unlock()
+			go func() { _, _ = io.Copy(u, c); _ = u.Close() }()
+			go func() { _, _ = io.Copy(c, u); _ = c.Close() }()
+		}
+	}()
+	cut = func() {
+		_ = lis.Close()
+		mu.Lock()
+		defer mu.Unlock()
+		closed = true
+		for _, c := range conns {
+			_ = c.Close()
+		}
+	}
+	t.Cleanup(cut)
+	return lis.Addr().String(), cut
+}
+
+// keyOwnedBy returns a key that the two-node ring {n1, n2} assigns to n1.
+func keyOwnedBy(n1, n2 node) string {
+	ring := router.New()
+	ring.Reset([]router.Node{{ID: "node-1", Addr: n1.addr}, {ID: "node-2", Addr: n2.addr}})
+	for i := 0; ; i++ {
+		if owner, _ := ring.Lookup(fmt.Sprint("k", i)); owner.ID == "node-1" {
+			return fmt.Sprint("k", i)
+		}
+	}
+}
+
+// TestShutdownWithoutEtcdWaitsForLeaseExpiry: if node-1 can't revoke its lease,
+// node-2 keeps it in the ring until the lease expires. node-1 must keep serving
+// until then, or every Set for its keys and every Delete through node-2 fails.
+func TestShutdownWithoutEtcdWaitsForLeaseExpiry(t *testing.T) {
+	endpoint := startEtcd(t)
+	proxy, cut := tcpProxy(t, endpoint)
+	n1 := startNode(t, proxy, "node-1")
+	n2 := startNode(t, endpoint, "node-2")
+	key := keyOwnedBy(n1, n2)
+	require.Eventually(t, func() bool { return set(t.Context(), n2.client, key) == nil }, 5*time.Second, 20*time.Millisecond)
+
+	cut() // node-1 loses etcd; node-2 does not
+	done := make(chan struct{})
+	go func() { n1.shutdown(); close(done) }()
+
+	var sent, failures int
+	for running := true; running; {
+		select {
+		case <-done:
+			running = false
+		case <-time.After(10 * time.Millisecond):
+		}
+		sent++
+		_, delErr := n2.client.Delete(t.Context(), &runev1.DeleteRequest{Keys: []string{key}})
+		if set(t.Context(), n2.client, key) != nil || delErr != nil {
+			failures++
+		}
+	}
+	require.Positive(t, sent)
+	require.Zero(t, failures, "Set/Delete via node-2 failed during node-1 shutdown (%d rounds)", sent)
+	n2.shutdown()
+}
+
 // TestShutdownLeavesRingBeforeDraining: on shutdown node-1's etcd key must be gone
 // while an in-flight RPC is still draining, that RPC must succeed, and forwards
 // sent through node-2 during the whole shutdown must not fail.
@@ -117,15 +205,7 @@ func TestShutdownLeavesRingBeforeDraining(t *testing.T) {
 	}
 	require.True(t, registered())
 
-	// Find a key that node-2 forwards to node-1.
-	ring := router.New()
-	ring.Reset([]router.Node{{ID: "node-1", Addr: n1.addr}, {ID: "node-2", Addr: n2.addr}})
-	key := ""
-	for i := 0; key == ""; i++ {
-		if owner, _ := ring.Lookup(fmt.Sprint("k", i)); owner.ID == "node-1" {
-			key = fmt.Sprint("k", i)
-		}
-	}
+	key := keyOwnedBy(n1, n2) // node-2 forwards it to node-1
 	require.Eventually(t, func() bool { return set(t.Context(), n2.client, key) == nil }, 5*time.Second, 20*time.Millisecond)
 
 	inflight, err := n1.client.Set(t.Context())
