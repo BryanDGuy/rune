@@ -73,6 +73,9 @@ jobs:
   release:
     needs: [test, test-integration]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    concurrency:
+      group: release-main
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -87,12 +90,18 @@ jobs:
           fetch-depth: 0
       - uses: cycjimmy/semantic-release-action@b12c8f6015dc215fe37bc154d4ad456dd3833c90 # v6.0.0
         id: semantic
+        with:
+          semantic_version: 25.0.2 # stale-push guard verified in this version; plugins come from its own deps
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   docker:
     needs: release
     if: needs.release.outputs.published == 'true'
+    # shortcut: one pending job per group, so with 3+ quick releases a middle version gets no image (latest stays right); add a queue if that matters.
+    concurrency:
+      group: docker-main
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
