@@ -139,6 +139,8 @@ io.Copy(dest, r) // streams chunk-by-chunk, never buffers the full value
 
 The Go SDK is the most convenient client, but Rune's interface is plain gRPC — any language can generate a client from [`api/proto/rune/v1/rune.proto`](api/proto/rune/v1/rune.proto) and call it directly.
 
+Go users who want raw gRPC should import the generated package `github.com/bryandguy/rune/sdk/go/gen/rune/v1` instead of generating their own copy. Two Go copies of `rune.proto` in one binary panic at startup (`proto: file "rune/v1/rune.proto" is already registered`).
+
 In cluster mode you can connect to **any** node: if it doesn't own the requested key, it forwards the request to the node that does and relays the response back. So a direct client always gets correct results without knowing the ring layout — at the cost of one extra hop for keys the entry node doesn't own.
 
 To avoid that hop, read the **`x-rune-owner`** response header. On every Get/Set in cluster mode, the node sets this header to the advertised address of the node that owns the key. A client can cache `key → address` and connect to the owner directly next time, getting the same owner-aware routing as `ClusterClient` without watching etcd or reimplementing the hash ring. Stale hints are self-correcting: if the ring has since changed, the new entry node simply forwards again and returns an updated `x-rune-owner`.

@@ -77,7 +77,7 @@ All files importing the packages below must be updated.
 | `github.com/bryandguy/rune/gen/rune/v1` | `github.com/bryandguy/rune/sdk/go/gen/rune/v1` (server and SDK) |
 | `github.com/bryandguy/rune/test/testutil` | `github.com/bryandguy/rune/rune/test/testutil` |
 
-Each module is self-contained — no `replace` directives are needed. The `go.work` workspace handles local resolution for development.
+`rune` resolves `sdk/go` through a `replace` until `sdk/go` is tagged (see above); otherwise no `replace` directives are needed. The `go.work` workspace handles local resolution for development.
 
 The `sdk/go` package path (`github.com/bryandguy/rune/sdk/go`) is unchanged.
 
