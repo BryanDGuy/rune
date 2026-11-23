@@ -12,7 +12,6 @@
 
 BINARY       := bin/rune
 BENCH_BINARY := bin/bench
-MODERNIZE    := golang.org/x/tools/go/analysis/passes/modernize/cmd/modernize@v0.53.0
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BINARY) ./rune/cmd/rune
@@ -94,18 +93,18 @@ vet-sdk:
 modernize: modernize-rune modernize-sdk
 
 modernize-rune:
-	@pkgs=$$(go list ./rune/... | grep -v /rune/internal/gen/); [ -z "$$pkgs" ] || go run $(MODERNIZE) $$pkgs
+	@pkgs=$$(go list ./rune/... | grep -v /rune/internal/gen/); [ -z "$$pkgs" ] || go fix -diff $$pkgs
 
 modernize-sdk:
-	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/internal/gen/); [ -z "$$pkgs" ] || go run $(MODERNIZE) $$pkgs
+	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/internal/gen/); [ -z "$$pkgs" ] || go fix -diff $$pkgs
 
 modernize-fix: modernize-fix-rune modernize-fix-sdk
 
 modernize-fix-rune:
-	@pkgs=$$(go list ./rune/... | grep -v /rune/internal/gen/); [ -z "$$pkgs" ] || go run $(MODERNIZE) -fix $$pkgs
+	@pkgs=$$(go list ./rune/... | grep -v /rune/internal/gen/); [ -z "$$pkgs" ] || go fix $$pkgs
 
 modernize-fix-sdk:
-	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/internal/gen/); [ -z "$$pkgs" ] || go run $(MODERNIZE) -fix $$pkgs
+	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/internal/gen/); [ -z "$$pkgs" ] || go fix $$pkgs
 
 # Local 3-node cluster + etcd via docker-compose (nodes on host ports 7946/7947/7948).
 cluster-up:
