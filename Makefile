@@ -61,10 +61,6 @@ verify-sdk: lint-sdk fmt-check-sdk vet-sdk modernize-sdk
 
 lint: lint-rune lint-sdk
 
-# golangci-lint refuses a Go toolchain newer than the one it was built with (1.26); override with LINT_GOTOOLCHAIN=...
-LINT_GOTOOLCHAIN ?= go1.26.2
-lint-rune lint-sdk: export GOTOOLCHAIN = $(LINT_GOTOOLCHAIN)
-
 lint-rune:
 	@golangci-lint run ./rune/...
 

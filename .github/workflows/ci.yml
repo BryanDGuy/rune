@@ -45,7 +45,7 @@ jobs:
           go-version-file: go.work
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: v2.15.0
           args: ./rune/... ./sdk/go/...
 
   test:
