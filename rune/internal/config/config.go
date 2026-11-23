@@ -11,6 +11,18 @@ import (
 	"time"
 )
 
+// Defaults for the memory limits. server.New also applies them to zero fields,
+// so a Config built without LoadConfig does not reject all traffic.
+const (
+	DefaultMaxValueBytes    = 512 * 1024 * 1024      // 512MB
+	DefaultMaxInflightBytes = 2 * 1024 * 1024 * 1024 // 2GB
+	DefaultGetIdleTimeout   = 30 * time.Second
+
+	// badgerMaxValueBytes is Badger v4's limit: Txn.SetEntry rejects values longer
+	// than Options.ValueLogFileSize (default 1<<30 - 1, badger txn.go:368).
+	badgerMaxValueBytes = 1<<30 - 1
+)
+
 type Config struct {
 	LogLevel           string
 	DataDir            string
@@ -27,6 +39,9 @@ type Config struct {
 	MetricsPort        int
 	StreamChunkSize    int
 	BlockCacheSize     int64
+	MaxValueBytes      int64
+	MaxInflightBytes   int64
+	GetIdleTimeout     time.Duration
 }
 
 // LoadConfig builds a Config from environment variables, falling back to defaults.
@@ -48,6 +63,9 @@ type Config struct {
 //	RUNE_BLOCK_CACHE_SIZE   (default: 0 — use Badger's built-in default; e.g. "256MB" enables a larger cache for read-heavy workloads)
 //	RUNE_NODE_ID            (default: hostname)
 //	RUNE_NODE_ADDR          (default: localhost:{RUNE_PORT})
+//	RUNE_MAX_VALUE_BYTES    (default: 512MB — larger Sets fail with ResourceExhausted)
+//	RUNE_MAX_INFLIGHT_BYTES (default: 2GB — server-wide cap on buffered Set/Get value bytes; must be >= RUNE_MAX_VALUE_BYTES)
+//	RUNE_GET_IDLE_TIMEOUT   (default: 30s — a Get whose client reads nothing for this long is ended, releasing its bytes)
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		Port:               7946,
@@ -61,6 +79,9 @@ func LoadConfig() (*Config, error) {
 		StreamChunkSize:    1024 * 1024, // 1MB
 		GCInterval:         10 * time.Minute,
 		GCDiscardRatio:     0.5,
+		MaxValueBytes:      DefaultMaxValueBytes,
+		MaxInflightBytes:   DefaultMaxInflightBytes,
+		GetIdleTimeout:     DefaultGetIdleTimeout,
 	}
 
 	var err error
@@ -121,6 +142,21 @@ func LoadConfig() (*Config, error) {
 			return nil, fmt.Errorf("RUNE_BLOCK_CACHE_SIZE: %w", err)
 		}
 	}
+	if v := os.Getenv("RUNE_MAX_VALUE_BYTES"); v != "" {
+		if cfg.MaxValueBytes, err = parseBytes(v); err != nil {
+			return nil, fmt.Errorf("RUNE_MAX_VALUE_BYTES: %w", err)
+		}
+	}
+	if v := os.Getenv("RUNE_MAX_INFLIGHT_BYTES"); v != "" {
+		if cfg.MaxInflightBytes, err = parseBytes(v); err != nil {
+			return nil, fmt.Errorf("RUNE_MAX_INFLIGHT_BYTES: %w", err)
+		}
+	}
+	if v := os.Getenv("RUNE_GET_IDLE_TIMEOUT"); v != "" {
+		if cfg.GetIdleTimeout, err = time.ParseDuration(v); err != nil {
+			return nil, fmt.Errorf("RUNE_GET_IDLE_TIMEOUT: %w", err)
+		}
+	}
 	if v := os.Getenv("RUNE_ETCD_ENDPOINTS"); v != "" {
 		for e := range strings.SplitSeq(v, ",") {
 			cfg.EtcdEndpoints = append(cfg.EtcdEndpoints, strings.TrimSpace(e))
@@ -170,6 +206,15 @@ func (c *Config) Validate() error {
 	}
 	if c.MaxStorageBytes <= 0 {
 		errs = append(errs, fmt.Errorf("RUNE_MAX_STORAGE %d: must be > 0", c.MaxStorageBytes))
+	}
+	if c.MaxValueBytes <= 0 || c.MaxValueBytes > badgerMaxValueBytes {
+		errs = append(errs, fmt.Errorf("RUNE_MAX_VALUE_BYTES must be in (0, %d], got %d", badgerMaxValueBytes, c.MaxValueBytes))
+	}
+	if c.MaxInflightBytes < c.MaxValueBytes {
+		errs = append(errs, fmt.Errorf("RUNE_MAX_INFLIGHT_BYTES (%d) must be >= RUNE_MAX_VALUE_BYTES (%d)", c.MaxInflightBytes, c.MaxValueBytes))
+	}
+	if c.GetIdleTimeout <= 0 {
+		errs = append(errs, fmt.Errorf("RUNE_GET_IDLE_TIMEOUT must be > 0, got %s", c.GetIdleTimeout))
 	}
 	return errors.Join(errs...)
 }

@@ -70,6 +70,10 @@ func (s *BadgerStore) Close() error {
 }
 
 func (s *BadgerStore) Get(key string) ([]byte, error) {
+	return s.GetReserved(key, func(int64) bool { return true })
+}
+
+func (s *BadgerStore) GetReserved(key string, reserve func(n int64) bool) ([]byte, error) {
 	var buf []byte
 	err := s.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
@@ -77,6 +81,9 @@ func (s *BadgerStore) Get(key string) ([]byte, error) {
 			return err
 		}
 		return item.Value(func(val []byte) error {
+			if !reserve(int64(len(val))) {
+				return ErrOverBudget
+			}
 			buf = make([]byte, len(val))
 			copy(buf, val)
 			return nil
@@ -90,7 +97,7 @@ func (s *BadgerStore) Get(key string) ([]byte, error) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, err // includes ErrOverBudget: neither a hit nor a miss
 	}
 	s.hits.Add(1)
 	if s.m != nil {

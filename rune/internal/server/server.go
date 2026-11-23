@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net"
@@ -29,6 +30,12 @@ type Server struct {
 	grpcServer   *grpc.Server
 	healthServer *health.Server
 	tracker      *connTracker
+	inflight     atomic.Int64 // value bytes held by Set buffers and Get copies
+
+	// Memory limits from cfg, with zero fields replaced by the config defaults.
+	maxValueBytes    int64
+	maxInflightBytes int64
+	getIdleTimeout   time.Duration
 }
 
 // ClusterOptions wires a Server into a cluster. Membership and Dialer must both
@@ -44,7 +51,12 @@ func New(cfg *config.Config, store storage.Storage, logger *logging.Logger, clus
 	if logger == nil {
 		logger = logging.Discard()
 	}
-	s := &Server{cfg: cfg, store: store, logger: logger, m: m}
+	s := &Server{
+		cfg: cfg, store: store, logger: logger, m: m,
+		maxValueBytes:    cmp.Or(cfg.MaxValueBytes, config.DefaultMaxValueBytes),
+		maxInflightBytes: cmp.Or(cfg.MaxInflightBytes, config.DefaultMaxInflightBytes),
+		getIdleTimeout:   cmp.Or(cfg.GetIdleTimeout, config.DefaultGetIdleTimeout),
+	}
 	if clusterOpts != nil {
 		s.membership = clusterOpts.Membership
 		s.dialer = clusterOpts.Dialer
@@ -113,6 +125,21 @@ func (s *Server) Stop() {
 	case <-t.C:
 		s.grpcServer.Stop()
 	}
+}
+
+// reserve claims n bytes of the in-flight budget, or reports false (claiming
+// nothing) when that would exceed MaxInflightBytes. It never waits: Sets grow
+// incrementally, so waiting could deadlock streams that each hold a part.
+func (s *Server) reserve(n int64) bool {
+	if s.inflight.Add(n) > s.maxInflightBytes {
+		s.inflight.Add(-n)
+		return false
+	}
+	return true
+}
+
+func (s *Server) release(n int64) {
+	s.inflight.Add(-n)
 }
 
 func (s *Server) ActiveConns() int64 {

@@ -71,23 +71,64 @@ func (h *handler) Get(req *runev1.GetRequest, stream grpc.ServerStreamingServer[
 		h.srv.logger.Debug("forwarding get", "key", req.Key, "owner", addr)
 		return h.forwardGet(stream.Context(), addr, req, stream)
 	}
-	value, err := h.srv.store.Get(req.Key)
+	var charged int64
+	defer func() { h.srv.release(charged) }()
+	var size int64
+	value, err := h.srv.store.GetReserved(req.Key, func(n int64) bool {
+		size = n
+		if !h.srv.reserve(n) {
+			return false
+		}
+		charged = n
+		return true
+	})
 	if errors.Is(err, storage.ErrNotFound) {
 		return status.Error(codes.NotFound, "key not found")
+	}
+	if errors.Is(err, storage.ErrOverBudget) && size > h.srv.maxInflightBytes {
+		// Stored before the limits were lowered: it can never fit, so retrying won't help.
+		return status.Errorf(codes.FailedPrecondition, "value of %d bytes exceeds the server memory budget", size)
+	}
+	if errors.Is(err, storage.ErrOverBudget) {
+		return status.Error(codes.ResourceExhausted, "server memory budget exhausted")
 	}
 	if err != nil {
 		return status.Errorf(codes.Internal, "get: %v", err)
 	}
 
+	// Send from a goroutine so a client that stops reading cannot hold the budget
+	// forever: when no chunk goes out for getIdleTimeout the handler returns, gRPC
+	// cancels the stream, and the blocked Send unblocks with an error.
 	chunkSize := h.srv.cfg.StreamChunkSize
-	for len(value) > 0 {
-		n := min(chunkSize, len(value))
-		if err := stream.Send(&runev1.GetResponse{Chunk: value[:n]}); err != nil {
-			return err
+	done := make(chan error, 1)
+	progress := make(chan struct{}, 1)
+	go func() {
+		for len(value) > 0 {
+			n := min(chunkSize, len(value))
+			if err := stream.Send(&runev1.GetResponse{Chunk: value[:n]}); err != nil {
+				done <- err
+				return
+			}
+			value = value[n:]
+			select {
+			case progress <- struct{}{}:
+			default:
+			}
 		}
-		value = value[n:]
+		done <- nil
+	}()
+	idle := time.NewTimer(h.srv.getIdleTimeout)
+	defer idle.Stop()
+	for {
+		select {
+		case err := <-done:
+			return err
+		case <-progress:
+			idle.Reset(h.srv.getIdleTimeout)
+		case <-idle.C:
+			return status.Errorf(codes.DeadlineExceeded, "client read nothing for %s", h.srv.getIdleTimeout)
+		}
 	}
-	return nil
 }
 
 func (h *handler) peerClient(peerAddr string) (runev1.RuneServiceClient, error) {
@@ -141,6 +182,8 @@ func (h *handler) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, runev
 	key := hdr.Key
 	ttl := hdr.TtlSeconds
 	var value []byte
+	var charged int64
+	defer func() { h.srv.release(charged) }()
 	for {
 		msg, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
@@ -152,6 +195,22 @@ func (h *handler) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, runev
 		chunk, ok := msg.Payload.(*runev1.SetRequest_Chunk)
 		if !ok || chunk == nil {
 			return status.Error(codes.InvalidArgument, "expected chunk payload after header")
+		}
+		need := int64(len(value) + len(chunk.Chunk))
+		if need > h.srv.maxValueBytes {
+			return status.Errorf(codes.ResourceExhausted, "value exceeds max size of %d bytes", h.srv.maxValueBytes)
+		}
+		if need > int64(cap(value)) {
+			// Grow by doubling (capped at the max) and charge the budget before allocating.
+			// make, not append/slices.Grow, so the capacity is exactly what was charged.
+			newCap := min(max(2*int64(cap(value)), need), h.srv.maxValueBytes)
+			if !h.srv.reserve(newCap - charged) {
+				return status.Error(codes.ResourceExhausted, "server memory budget exhausted")
+			}
+			charged = newCap
+			grown := make([]byte, len(value), newCap)
+			copy(grown, value)
+			value = grown
 		}
 		value = append(value, chunk.Chunk...)
 	}
@@ -183,11 +242,15 @@ func (h *handler) forwardSet(ctx context.Context, peerAddr string, hdr *runev1.S
 			return err
 		}
 		if err := peerStream.Send(msg); err != nil {
-			return status.Errorf(codes.Unavailable, "peer set chunk: %v", err)
+			if errors.Is(err, io.EOF) {
+				// The peer ended the stream; its real status only arrives via CloseAndRecv.
+				_, err = peerStream.CloseAndRecv()
+			}
+			return err
 		}
 	}
 	if _, err := peerStream.CloseAndRecv(); err != nil {
-		return status.Errorf(codes.Unavailable, "peer set close: %v", err)
+		return err
 	}
 	return stream.SendAndClose(&runev1.SetResponse{})
 }
@@ -209,6 +272,7 @@ func (h *handler) Delete(ctx context.Context, req *runev1.DeleteRequest) (*runev
 	}
 	// shortcut: peers are contacted sequentially; parallelise if ring size makes latency matter.
 	var errs []error
+	code := codes.OK // the failed peers' shared status code, or Unavailable if they differ
 	for _, node := range h.srv.membership.Ring().Nodes() {
 		if node.ID == h.srv.membership.NodeID() {
 			continue
@@ -220,11 +284,16 @@ func (h *handler) Delete(ctx context.Context, req *runev1.DeleteRequest) (*runev
 			cancel()
 		}
 		if err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", node.ID, err))
+			if c := status.Code(err); code == codes.OK {
+				code = c
+			} else if code != c {
+				code = codes.Unavailable // peer order is random, so don't let it pick the code
+			}
+			errs = append(errs, fmt.Errorf("%s: %s: %s", node.ID, status.Code(err), status.Convert(err).Message()))
 		}
 	}
 	if len(errs) > 0 {
-		return nil, status.Errorf(codes.Unavailable, "peer delete: %v", errors.Join(errs...))
+		return nil, status.Errorf(code, "peer delete: %v", errors.Join(errs...))
 	}
 	return &runev1.DeleteResponse{}, nil
 }
@@ -255,7 +324,7 @@ func (h *handler) Exists(ctx context.Context, req *runev1.ExistsRequest) (*runev
 		resp, err := client.Exists(peerCtx, &runev1.ExistsRequest{Keys: keys})
 		cancel()
 		if err != nil {
-			return nil, status.Errorf(codes.Unavailable, "peer exists %s: %v", addr, err)
+			return nil, status.Errorf(status.Code(err), "peer exists %s: %s", addr, status.Convert(err).Message())
 		}
 		n += resp.Count
 	}

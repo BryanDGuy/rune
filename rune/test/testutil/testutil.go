@@ -27,6 +27,8 @@ type BufconnOptions struct {
 	// ForwardTo makes the server forward all key requests to the given peer
 	// connection. The ring contains only that peer, so every key routes to it.
 	ForwardTo *grpc.ClientConn
+	// Configure, if set, adjusts the server config before the server starts.
+	Configure func(*config.Config)
 }
 
 func BaseConfig(t *testing.T) *config.Config {
@@ -40,6 +42,8 @@ func BaseConfig(t *testing.T) *config.Config {
 		StreamChunkSize:    1 << 20,
 		GCInterval:         time.Hour,
 		GCDiscardRatio:     0.5,
+		MaxValueBytes:      512 << 20,
+		MaxInflightBytes:   2 << 30,
 	}
 }
 
@@ -51,6 +55,9 @@ func BaseConfig(t *testing.T) *config.Config {
 func NewBufconnConn(t *testing.T, bufSize int, opts *BufconnOptions) (*grpc.ClientConn, func()) {
 	t.Helper()
 	cfg := BaseConfig(t)
+	if opts != nil && opts.Configure != nil {
+		opts.Configure(cfg)
+	}
 	store, err := storage.NewBadgerStore(cfg, nil)
 	require.NoError(t, err)
 

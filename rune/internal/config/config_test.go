@@ -179,3 +179,51 @@ func TestLoadConfigAcceptsBoundaryValues(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"etcd1:2379", "etcd2:2379"}, cfg.EtcdEndpoints)
 }
+
+func TestValueLimitsDefaultsAndOverrides(t *testing.T) {
+	cfg, err := LoadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, int64(512<<20), cfg.MaxValueBytes)
+	assert.Equal(t, int64(2<<30), cfg.MaxInflightBytes)
+	assert.Equal(t, 30*time.Second, cfg.GetIdleTimeout)
+
+	t.Setenv("RUNE_MAX_VALUE_BYTES", "10MB")
+	t.Setenv("RUNE_MAX_INFLIGHT_BYTES", "100MB")
+	t.Setenv("RUNE_GET_IDLE_TIMEOUT", "5s")
+	cfg, err = LoadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, 5*time.Second, cfg.GetIdleTimeout)
+	assert.Equal(t, int64(10<<20), cfg.MaxValueBytes)
+	assert.Equal(t, int64(100<<20), cfg.MaxInflightBytes)
+}
+
+func TestValueLimitsInvalid(t *testing.T) {
+	cases := []struct{ maxValue, inflight string }{
+		{"0", ""},
+		{"-1", ""},
+		{"abc", ""},
+		{"", "0"},
+		{"", "xyz"},
+		{"100MB", "10MB"}, // budget smaller than one max-size value
+		{"1GB", "4GB"},    // Badger rejects values of 1 GiB or more
+	}
+	for _, v := range []string{"0s", "-1s", "soon"} {
+		t.Run("idle "+v, func(t *testing.T) {
+			t.Setenv("RUNE_GET_IDLE_TIMEOUT", v)
+			_, err := LoadConfig()
+			assert.Error(t, err)
+		})
+	}
+	for _, c := range cases {
+		t.Run(c.maxValue+"/"+c.inflight, func(t *testing.T) {
+			if c.maxValue != "" {
+				t.Setenv("RUNE_MAX_VALUE_BYTES", c.maxValue)
+			}
+			if c.inflight != "" {
+				t.Setenv("RUNE_MAX_INFLIGHT_BYTES", c.inflight)
+			}
+			_, err := LoadConfig()
+			assert.Error(t, err)
+		})
+	}
+}
