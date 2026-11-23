@@ -6,7 +6,6 @@
         fmt fmt-rune fmt-sdk \
         fmt-check fmt-check-rune fmt-check-sdk \
         vet vet-rune vet-sdk \
-        fix-check fix-check-rune fix-check-sdk \
         fix fix-rune fix-sdk \
         cluster-up cluster-down bench
 
@@ -54,9 +53,9 @@ test-integration:
 
 verify: verify-rune verify-sdk
 
-verify-rune: lint-rune fmt-check-rune vet-rune fix-check-rune
+verify-rune: lint-rune fmt-check-rune vet-rune fix-rune
 
-verify-sdk: lint-sdk fmt-check-sdk vet-sdk fix-check-sdk
+verify-sdk: lint-sdk fmt-check-sdk vet-sdk fix-sdk
 
 lint: lint-rune lint-sdk
 
@@ -89,14 +88,6 @@ vet-rune:
 
 vet-sdk:
 	@go vet ./sdk/go/...
-
-fix-check: fix-check-rune fix-check-sdk
-
-fix-check-rune:
-	@pkgs=$$(go list ./rune/... | grep -v /rune/internal/gen/); [ -z "$$pkgs" ] || go fix -diff $$pkgs
-
-fix-check-sdk:
-	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/internal/gen/); [ -z "$$pkgs" ] || go fix -diff $$pkgs
 
 fix: fix-rune fix-sdk
 
