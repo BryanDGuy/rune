@@ -172,10 +172,9 @@ func (c *ClusterClient) Set(ctx context.Context, key string, r io.Reader, opts *
 	return nil
 }
 
-// Delete removes keys from the cluster. Keys with a cached owner are routed
-// directly; keys without a cached owner are sent to an arbitrary node (which only
-// succeeds if that node owns the key). Perform a Get or Set before Delete for keys
-// that have not been previously accessed to ensure correct routing.
+// Delete removes keys from the cluster. Keys with a cached owner are sent there;
+// the rest go to an arbitrary node. Either way the receiving server broadcasts
+// the delete to every ring member, so no prior Get or Set is needed.
 //
 // Delete attempts every node even if one fails. On error, some keys may already
 // be deleted — the operation is not atomic across nodes. The first error encountered

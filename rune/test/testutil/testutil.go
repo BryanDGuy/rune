@@ -10,6 +10,7 @@ import (
 
 	"github.com/bryandguy/rune/rune/internal/cluster"
 	"github.com/bryandguy/rune/rune/internal/config"
+	"github.com/bryandguy/rune/rune/internal/router"
 	"github.com/bryandguy/rune/rune/internal/server"
 	"github.com/bryandguy/rune/rune/internal/storage"
 	"github.com/stretchr/testify/require"
@@ -87,4 +88,55 @@ func NewBufconnConn(t *testing.T, bufSize int, opts *BufconnOptions) (*grpc.Clie
 			dialer.Close()
 		}
 	}
+}
+
+// NewBufconnCluster starts n Rune servers (node-0..node-n-1) sharing one ring
+// that contains all of them, each able to forward to every other. It returns
+// the client conns, the shared ring (to look up a key's owner), and a stop
+// func per node so a test can take one peer down. Everything is cleaned up via
+// t.Cleanup.
+func NewBufconnCluster(t *testing.T, n int) ([]*grpc.ClientConn, *router.Router, []func()) {
+	t.Helper()
+	ring := router.New()
+	conns := make([]*grpc.ClientConn, n)
+	liss := make([]*bufconn.Listener, n)
+	for i := range n {
+		lis := bufconn.Listen(1 << 20)
+		conn, err := grpc.NewClient(
+			fmt.Sprintf("passthrough://bufnet-%d", bufconnSeq.Add(1)),
+			grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+				return lis.DialContext(ctx)
+			}),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = conn.Close() })
+		conns[i], liss[i] = conn, lis
+		ring.Add(router.Node{ID: fmt.Sprintf("node-%d", i), Addr: conn.Target()})
+	}
+
+	stops := make([]func(), n)
+	for i := range n {
+		cfg := BaseConfig(t)
+		store, err := storage.NewBadgerStore(cfg, nil)
+		require.NoError(t, err)
+		dialer := cluster.NewPeerDialer()
+		for j, c := range conns {
+			if j != i {
+				require.NoError(t, dialer.DialWith(c.Target(), c))
+			}
+		}
+		srv := server.New(cfg, store, nil, &server.ClusterOptions{
+			Membership: &fakeMembership{nodeID: fmt.Sprintf("node-%d", i), ring: ring},
+			Dialer:     dialer,
+		}, nil)
+		srv.StartOnListener(liss[i])
+		stops[i] = srv.Stop
+		t.Cleanup(func() {
+			srv.Stop()
+			_ = store.Close()
+			dialer.Close()
+		})
+	}
+	return conns, ring, stops
 }

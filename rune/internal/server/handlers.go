@@ -3,7 +3,9 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"time"
 
 	"github.com/bryandguy/rune/rune/internal/storage"
 	runev1 "github.com/bryandguy/rune/sdk/go/gen/rune/v1"
@@ -16,6 +18,10 @@ import (
 const (
 	metaForwarded = "x-rune-forwarded"
 	metaOwner     = "x-rune-owner"
+
+	// peerTimeout bounds each Delete/Exists call to a peer, so a silently dead
+	// peer can't hang the request until the TCP timeout.
+	peerTimeout = 3 * time.Second
 )
 
 type handler struct {
@@ -186,17 +192,72 @@ func (h *handler) forwardSet(ctx context.Context, peerAddr string, hdr *runev1.S
 	return stream.SendAndClose(&runev1.SetResponse{})
 }
 
-func (h *handler) Delete(_ context.Context, req *runev1.DeleteRequest) (*runev1.DeleteResponse, error) {
+// Delete removes keys locally and, on the client-facing node in cluster mode,
+// broadcasts to every other ring member so the owner and any orphan copies
+// (left by ring changes) are cleared. Every peer is tried even if one fails; it
+// returns OK only if every node succeeds.
+func (h *handler) Delete(ctx context.Context, req *runev1.DeleteRequest) (*runev1.DeleteResponse, error) {
+	if len(req.Keys) == 0 {
+		return &runev1.DeleteResponse{}, nil
+	}
 	if err := h.srv.store.Delete(req.Keys...); err != nil {
 		return nil, status.Errorf(codes.Internal, "delete: %v", err)
+	}
+	// owner() resolves no address unless we are the client-facing node in cluster mode.
+	if addr, _ := h.owner(ctx, ""); addr == "" {
+		return &runev1.DeleteResponse{}, nil
+	}
+	// shortcut: peers are contacted sequentially; parallelise if ring size makes latency matter.
+	var errs []error
+	for _, node := range h.srv.membership.Ring().Nodes() {
+		if node.ID == h.srv.membership.NodeID() {
+			continue
+		}
+		client, err := h.peerClient(node.Addr)
+		if err == nil {
+			peerCtx, cancel := context.WithTimeout(forwardCtx(ctx), peerTimeout)
+			_, err = client.Delete(peerCtx, req)
+			cancel()
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", node.ID, err))
+		}
+	}
+	if len(errs) > 0 {
+		return nil, status.Errorf(codes.Unavailable, "peer delete: %v", errors.Join(errs...))
 	}
 	return &runev1.DeleteResponse{}, nil
 }
 
-func (h *handler) Exists(_ context.Context, req *runev1.ExistsRequest) (*runev1.ExistsResponse, error) {
-	n, err := h.srv.store.Exists(req.Keys...)
+// Exists counts keys on their owners: local keys here, the rest forwarded to
+// each owner in one request per owner.
+func (h *handler) Exists(ctx context.Context, req *runev1.ExistsRequest) (*runev1.ExistsResponse, error) {
+	var local []string
+	remote := map[string][]string{}
+	for _, key := range req.Keys {
+		if addr, isRemote := h.owner(ctx, key); isRemote {
+			remote[addr] = append(remote[addr], key)
+		} else {
+			local = append(local, key)
+		}
+	}
+	n, err := h.srv.store.Exists(local...)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "exists: %v", err)
+	}
+	// shortcut: owners are contacted sequentially; parallelise if ring size makes latency matter.
+	for addr, keys := range remote {
+		client, err := h.peerClient(addr)
+		if err != nil {
+			return nil, status.Errorf(codes.Unavailable, "peer exists %s: %v", addr, err)
+		}
+		peerCtx, cancel := context.WithTimeout(forwardCtx(ctx), peerTimeout)
+		resp, err := client.Exists(peerCtx, &runev1.ExistsRequest{Keys: keys})
+		cancel()
+		if err != nil {
+			return nil, status.Errorf(codes.Unavailable, "peer exists %s: %v", addr, err)
+		}
+		n += resp.Count
 	}
 	return &runev1.ExistsResponse{Count: n}, nil
 }
