@@ -12,7 +12,7 @@
 
 BINARY       := bin/rune
 BENCH_BINARY := bin/bench
-MODERNIZE    := golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@v0.23.0
+MODERNIZE    := golang.org/x/tools/go/analysis/passes/modernize/cmd/modernize@v0.53.0
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BINARY) ./rune/cmd/rune
