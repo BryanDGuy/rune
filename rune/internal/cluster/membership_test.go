@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/api/v3/mvccpb"
+	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -254,17 +255,26 @@ func TestMembershipStopRevokesLease(t *testing.T) {
 	assert.Empty(t, store.leases, "lease should be revoked on Stop")
 }
 
-// failingRevokeStore fails Revoke, like an etcd this node can no longer reach.
-type failingRevokeStore struct{ *fakeStore }
+// failingRevokeStore fails Revoke with err.
+type failingRevokeStore struct {
+	*fakeStore
+	err error
+}
 
-func (failingRevokeStore) Revoke(context.Context, clientv3.LeaseID) (*clientv3.LeaseRevokeResponse, error) {
-	return nil, errors.New("etcd unreachable")
+func (f failingRevokeStore) Revoke(context.Context, clientv3.LeaseID) (*clientv3.LeaseRevokeResponse, error) {
+	return nil, f.err
 }
 
 func TestMembershipStopReportsRevokeFailure(t *testing.T) {
-	m := New(failingRevokeStore{newFakeStore()}, "node-1", "host1:7946", nil)
+	// etcd unreachable: peers still list this node, so the caller must know.
+	m := New(failingRevokeStore{newFakeStore(), errors.New("etcd unreachable")}, "node-1", "host1:7946", nil)
 	require.NoError(t, m.Start(t.Context()))
-	require.ErrorContains(t, m.Stop(), "etcd unreachable", "caller must know peers still list this node")
+	require.ErrorContains(t, m.Stop(), "etcd unreachable")
+
+	// Lease already revoked or expired: peers already dropped this node, so it is not a failure.
+	m = New(failingRevokeStore{newFakeStore(), rpctypes.ErrLeaseNotFound}, "node-1", "host1:7946", nil)
+	require.NoError(t, m.Start(t.Context()))
+	require.NoError(t, m.Stop())
 }
 
 func TestMembershipStopRemovesSelfFromRing(t *testing.T) {

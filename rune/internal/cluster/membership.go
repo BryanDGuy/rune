@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/bryandguy/rune/rune/internal/logging"
 	"github.com/bryandguy/rune/rune/internal/router"
 	"go.etcd.io/etcd/api/v3/mvccpb"
+	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -277,5 +279,8 @@ func (m *Membership) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err := m.store.Revoke(ctx, clientv3.LeaseID(m.leaseID.Load()))
+	if errors.Is(err, rpctypes.ErrLeaseNotFound) {
+		return nil // already revoked or expired: peers no longer list this node
+	}
 	return err
 }

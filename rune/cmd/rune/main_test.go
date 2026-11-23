@@ -122,7 +122,9 @@ func tcpProxy(t *testing.T, target string) (addr string, cut func()) {
 			}
 			mu.Lock()
 			if closed {
+				mu.Unlock()
 				_, _ = c.Close(), u.Close()
+				continue
 			}
 			conns = append(conns, c, u)
 			mu.Unlock()

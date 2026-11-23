@@ -96,8 +96,9 @@ func TestPeerDialerForgetRedials(t *testing.T) {
 // TestPeerDialerForgetKeepsInjectedConnOpen: an injected conn belongs to its
 // creator, so Forget drops it from the pool but never closes it.
 func TestPeerDialerForgetKeepsInjectedConnOpen(t *testing.T) {
+	prev := forgetCloseDelay
 	forgetCloseDelay = 0
-	t.Cleanup(func() { forgetCloseDelay = 35 * time.Second })
+	t.Cleanup(func() { forgetCloseDelay = prev })
 	d := NewPeerDialer()
 	defer d.Close()
 

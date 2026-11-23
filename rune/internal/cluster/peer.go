@@ -12,9 +12,10 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// forgetCloseDelay outlives a departing peer's leave delay plus its 30 s drain,
-// so forwards already in flight on the old connection can finish. A var only so tests can shorten it.
-var forgetCloseDelay = 35 * time.Second
+// forgetCloseDelay outlives a departing peer's longest shutdown after peers see it
+// leave (5 s revoke + 12 s wait when the revoke fails + 30 s drain), so forwards
+// already in flight on the old connection can finish. A var only so tests can shorten it.
+var forgetCloseDelay = 50 * time.Second
 
 var errDialerClosed = errors.New("cluster: PeerDialer is closed")
 
