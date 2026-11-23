@@ -67,14 +67,14 @@ func (e *evictionIndex) remove(key string) {
 	delete(e.entries, key)
 }
 
-// weightedScore: higher score = evicted first (large, cold keys).
+// evictionScore: higher score = evicted first (large, cold keys).
 //
-//	score = (size_bytes / 1e9 * sizeWeight) * (hours_since_last_access * ageWeight)
-func weightedScore(entry *evictionEntry, sizeWeight, ageWeight float64, now time.Time) float64 {
+//	score = size_bytes / 1e9 * hours_since_last_access
+func evictionScore(entry *evictionEntry, now time.Time) float64 {
 	sizeGB := float64(entry.size) / 1e9
 	lastAccessed := time.Unix(0, entry.lastAccessedNano.Load())
 	hoursSinceAccess := now.Sub(lastAccessed).Hours()
-	return (sizeGB * sizeWeight) * (hoursSinceAccess * ageWeight)
+	return sizeGB * hoursSinceAccess
 }
 
 type candidate struct {
@@ -85,7 +85,7 @@ type candidate struct {
 
 // snapshot drops TTL-expired entries (Badger already hides them), then scores
 // the rest, sampling time once, and returns the live bytes they hold.
-func (e *evictionIndex) snapshot(sizeWeight, ageWeight float64) (cs []candidate, used int64) {
+func (e *evictionIndex) snapshot() (cs []candidate, used int64) {
 	now := time.Now()
 	nowSec := uint64(now.Unix()) //nolint:gosec // wall clock is after 1970
 	e.mu.Lock()
@@ -97,7 +97,7 @@ func (e *evictionIndex) snapshot(sizeWeight, ageWeight float64) (cs []candidate,
 			delete(e.entries, key)
 			continue
 		}
-		cs = append(cs, candidate{key: key, score: weightedScore(entry, sizeWeight, ageWeight, now), size: entry.size})
+		cs = append(cs, candidate{key: key, score: evictionScore(entry, now), size: entry.size})
 		used += entry.size
 	}
 	return cs, used
@@ -107,7 +107,7 @@ func (e *evictionIndex) snapshot(sizeWeight, ageWeight float64) (cs []candidate,
 // Size() about once a minute and deletes free nothing until value-log GC.
 func checkEviction(ctx context.Context, store *BadgerStore) error {
 	threshold := int64(float64(store.cfg.MaxStorageBytes) * store.cfg.EvictionThreshold)
-	candidates, used := store.eviction.snapshot(store.cfg.EvictionSizeWeight, store.cfg.EvictionAgeWeight)
+	candidates, used := store.eviction.snapshot()
 	// Vlog garbage can fill the disk before live bytes reach the threshold. Then
 	// evict enough live bytes to get back to the high-water mark; statfs is not
 	// re-read in the pass because deletes free nothing until GC. If the last pass

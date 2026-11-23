@@ -83,7 +83,7 @@ func TestDiskPressureKeepsAcceptingWrites(t *testing.T) {
 		if i%64 == 63 { // one pressure tick per 128 MiB written
 			s.pressurePass(context.Background())
 			peak = max(peak, dirBytes(t, cfg.DataDir))
-			if _, live := s.eviction.snapshot(1, 1); s.evictionsTotal.Load() > 0 {
+			if _, live := s.eviction.snapshot(); s.evictionsTotal.Load() > 0 {
 				minLive = min(minLive, live)
 			}
 		}

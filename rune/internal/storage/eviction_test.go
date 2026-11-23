@@ -16,21 +16,21 @@ func newEntry(size int64, lastAccessed time.Time) *evictionEntry {
 	return e
 }
 
-// TestEvictionWeightedScore verifies the score formula:
+// TestEvictionScore verifies the score formula:
 //
-//	score = (size_bytes / 1e9 * sizeWeight) * (hours_since_access * ageWeight)
+//	score = size_bytes / 1e9 * hours_since_access
 //
 // Expected order: large+cold > large+hot > small+cold
-func TestEvictionWeightedScore(t *testing.T) {
+func TestEvictionScore(t *testing.T) {
 	now := time.Now()
 
 	largeCold := newEntry(500*1024*1024, now.Add(-48*time.Hour))
 	largeHot := newEntry(500*1024*1024, now.Add(-1*time.Hour))
 	smallCold := newEntry(1*1024*1024, now.Add(-48*time.Hour))
 
-	scoreLargeCold := weightedScore(largeCold, 1.0, 1.0, now)
-	scoreLargeHot := weightedScore(largeHot, 1.0, 1.0, now)
-	scoreSmallCold := weightedScore(smallCold, 1.0, 1.0, now)
+	scoreLargeCold := evictionScore(largeCold, now)
+	scoreLargeHot := evictionScore(largeHot, now)
+	scoreSmallCold := evictionScore(smallCold, now)
 
 	assert.Greater(t, scoreLargeCold, scoreLargeHot, "large+cold should score higher than large+hot")
 	assert.Greater(t, scoreLargeCold, scoreSmallCold, "large+cold should score higher than small+cold")
@@ -40,22 +40,8 @@ func TestEvictionWeightedScore(t *testing.T) {
 	sizeGB := float64(largeCold.size) / 1e9
 	lastAccessed := time.Unix(0, largeCold.lastAccessedNano.Load())
 	hours := now.Sub(lastAccessed).Hours()
-	expected := sizeGB * 1.0 * hours * 1.0
+	expected := sizeGB * hours
 	assert.InDelta(t, expected, scoreLargeCold, 0.001)
-}
-
-// TestEvictionWeightedScoreWeights verifies that custom weights scale the score correctly.
-func TestEvictionWeightedScoreWeights(t *testing.T) {
-	now := time.Now()
-	entry := newEntry(1_000_000_000, now.Add(-2*time.Hour)) // exactly 1 GB
-
-	score1 := weightedScore(entry, 1.0, 1.0, now) // expected: 1.0 * 2.0 = 2.0
-	score2 := weightedScore(entry, 2.0, 1.0, now) // expected: 2.0 * 2.0 = 4.0
-	score3 := weightedScore(entry, 1.0, 3.0, now) // expected: 1.0 * 6.0 = 6.0
-
-	assert.InDelta(t, 2.0, score1, 0.001)
-	assert.InDelta(t, 4.0, score2, 0.001)
-	assert.InDelta(t, 6.0, score3, 0.001)
 }
 
 // TestRecordExistingIsCold verifies that keys restored at startup are treated as
@@ -71,8 +57,8 @@ func TestRecordExistingIsCold(t *testing.T) {
 
 	now := time.Now()
 	assert.Greater(t,
-		weightedScore(restored, 1.0, 1.0, now),
-		weightedScore(idx.entries["fresh"], 1.0, 1.0, now),
+		evictionScore(restored, now),
+		evictionScore(idx.entries["fresh"], now),
 		"restored (cold) keys should outrank freshly-set (warm) keys for eviction")
 }
 
@@ -229,7 +215,7 @@ func TestEvictionIgnoresExpiredBytes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(10), n, "live keys were evicted because of expired bytes")
 	assert.Zero(t, s.evictionsTotal.Load())
-	_, used := s.eviction.snapshot(1, 1)
+	_, used := s.eviction.snapshot()
 	assert.Equal(t, int64(10*size), used)
 }
 
@@ -253,7 +239,7 @@ func TestEvictionIndexRebuildsAfterRestart(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, s.Close()) })
 
-	_, used := s.eviction.snapshot(1, 1)
+	_, used := s.eviction.snapshot()
 	assert.Len(t, s.eviction.entries, n-1, "deleted key must not be restored")
 	assert.GreaterOrEqual(t, used, int64((n-1)*size))
 	assert.Less(t, used, int64((n-1)*size+(n-1)*256), "restart size is value plus small per-key overhead")

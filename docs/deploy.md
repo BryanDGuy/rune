@@ -166,8 +166,6 @@ All settings are environment variables. These are the ones that exist in this ve
 | `RUNE_LOG_LEVEL` | `info` | |
 | `RUNE_MAX_STORAGE` | `100GB` | Limit on live bytes (KB/MB/GB/TB, base 1024). Size the PVC at 2x this + 2 GiB; clamped to the volume size with a WARN. |
 | `RUNE_EVICTION_THRESHOLD` | `0.8` | Fraction of max storage before eviction starts. |
-| `RUNE_EVICTION_SIZE_WEIGHT` | `1.0` | Weight of value size in the eviction score. |
-| `RUNE_EVICTION_AGE_WEIGHT` | `1.0` | Weight of time since last access in the eviction score. |
 | `RUNE_STREAM_CHUNK_SIZE` | `1048576` | gRPC stream chunk size in bytes. |
 | `RUNE_GC_INTERVAL` | `10m` | Badger value-log GC interval. |
 | `RUNE_GC_DISCARD_RATIO` | `0.5` | Badger GC discard ratio. |

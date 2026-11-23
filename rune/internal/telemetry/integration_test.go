@@ -17,14 +17,12 @@ import (
 func baseIntegrationConfig(t *testing.T) *config.Config {
 	t.Helper()
 	return &config.Config{
-		DataDir:            t.TempDir(),
-		Port:               0,
-		MaxStorageBytes:    1 << 30,
-		EvictionThreshold:  0.8,
-		EvictionSizeWeight: 1.0,
-		EvictionAgeWeight:  1.0,
-		GCInterval:         time.Hour,
-		GCDiscardRatio:     0.5,
+		DataDir:           t.TempDir(),
+		Port:              0,
+		MaxStorageBytes:   1 << 30,
+		EvictionThreshold: 0.8,
+		GCInterval:        time.Hour,
+		GCDiscardRatio:    0.5,
 	}
 }
 

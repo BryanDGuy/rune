@@ -17,13 +17,11 @@ import (
 func baseStorageTestConfig(t *testing.T) *config.Config {
 	t.Helper()
 	return &config.Config{
-		DataDir:            t.TempDir(),
-		MaxStorageBytes:    1024 * 1024 * 1024,
-		EvictionThreshold:  0.8,
-		EvictionSizeWeight: 1.0,
-		EvictionAgeWeight:  1.0,
-		GCInterval:         time.Hour,
-		GCDiscardRatio:     0.5,
+		DataDir:           t.TempDir(),
+		MaxStorageBytes:   1024 * 1024 * 1024,
+		EvictionThreshold: 0.8,
+		GCInterval:        time.Hour,
+		GCDiscardRatio:    0.5,
 	}
 }
 
