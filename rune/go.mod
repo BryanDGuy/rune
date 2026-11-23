@@ -3,7 +3,7 @@ module github.com/bryandguy/rune/rune
 go 1.27
 
 require (
-	github.com/bryandguy/rune v0.0.0-20260523144032-af834841b9a5
+	github.com/bryandguy/rune/sdk/go v0.0.0
 	github.com/buraksezer/consistent v0.10.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/dgraph-io/badger/v4 v4.9.1
@@ -14,7 +14,6 @@ require (
 	go.etcd.io/etcd/client/v3 v3.5.21
 	go.etcd.io/etcd/server/v3 v3.5.21
 	google.golang.org/grpc v1.85.0
-	google.golang.org/protobuf v1.36.12
 )
 
 require (
@@ -77,8 +76,12 @@ require (
 	google.golang.org/genproto v0.0.0-20230822172742-b8732ec3820d // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260817212433-ac3dfec99bb1 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260817212433-ac3dfec99bb1 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	sigs.k8s.io/yaml v1.2.0 // indirect
 )
+
+// sdk/go has no published module version yet; drop this once it is tagged.
+replace github.com/bryandguy/rune/sdk/go => ../sdk/go
