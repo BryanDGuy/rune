@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -15,21 +16,21 @@ func newEntry(size int64, lastAccessed time.Time) *evictionEntry {
 	return e
 }
 
-// TestEvictionWeightedScore verifies the score formula:
+// TestEvictionScore verifies the score formula:
 //
-//	score = (size_bytes / 1e9 * sizeWeight) * (hours_since_access * ageWeight)
+//	score = size_bytes / 1e9 * hours_since_access
 //
 // Expected order: large+cold > large+hot > small+cold
-func TestEvictionWeightedScore(t *testing.T) {
+func TestEvictionScore(t *testing.T) {
 	now := time.Now()
 
 	largeCold := newEntry(500*1024*1024, now.Add(-48*time.Hour))
 	largeHot := newEntry(500*1024*1024, now.Add(-1*time.Hour))
 	smallCold := newEntry(1*1024*1024, now.Add(-48*time.Hour))
 
-	scoreLargeCold := weightedScore(largeCold, 1.0, 1.0, now)
-	scoreLargeHot := weightedScore(largeHot, 1.0, 1.0, now)
-	scoreSmallCold := weightedScore(smallCold, 1.0, 1.0, now)
+	scoreLargeCold := evictionScore(largeCold, now)
+	scoreLargeHot := evictionScore(largeHot, now)
+	scoreSmallCold := evictionScore(smallCold, now)
 
 	assert.Greater(t, scoreLargeCold, scoreLargeHot, "large+cold should score higher than large+hot")
 	assert.Greater(t, scoreLargeCold, scoreSmallCold, "large+cold should score higher than small+cold")
@@ -39,22 +40,8 @@ func TestEvictionWeightedScore(t *testing.T) {
 	sizeGB := float64(largeCold.size) / 1e9
 	lastAccessed := time.Unix(0, largeCold.lastAccessedNano.Load())
 	hours := now.Sub(lastAccessed).Hours()
-	expected := sizeGB * 1.0 * hours * 1.0
+	expected := sizeGB * hours
 	assert.InDelta(t, expected, scoreLargeCold, 0.001)
-}
-
-// TestEvictionWeightedScoreWeights verifies that custom weights scale the score correctly.
-func TestEvictionWeightedScoreWeights(t *testing.T) {
-	now := time.Now()
-	entry := newEntry(1_000_000_000, now.Add(-2*time.Hour)) // exactly 1 GB
-
-	score1 := weightedScore(entry, 1.0, 1.0, now) // expected: 1.0 * 2.0 = 2.0
-	score2 := weightedScore(entry, 2.0, 1.0, now) // expected: 2.0 * 2.0 = 4.0
-	score3 := weightedScore(entry, 1.0, 3.0, now) // expected: 1.0 * 6.0 = 6.0
-
-	assert.InDelta(t, 2.0, score1, 0.001)
-	assert.InDelta(t, 4.0, score2, 0.001)
-	assert.InDelta(t, 6.0, score3, 0.001)
 }
 
 // TestRecordExistingIsCold verifies that keys restored at startup are treated as
@@ -62,16 +49,16 @@ func TestEvictionWeightedScoreWeights(t *testing.T) {
 // written keys (recordSet) are warm.
 func TestRecordExistingIsCold(t *testing.T) {
 	idx := newEvictionIndex()
-	idx.recordSet("fresh", 1*1024*1024)
-	idx.recordExisting("restored", 1*1024*1024)
+	idx.recordSet("fresh", 1*1024*1024, 0)
+	idx.recordExisting("restored", 1*1024*1024, 0)
 
 	restored := idx.entries["restored"]
 	assert.Equal(t, int64(0), restored.lastAccessedNano.Load(), "restored key should have epoch last-access")
 
 	now := time.Now()
 	assert.Greater(t,
-		weightedScore(restored, 1.0, 1.0, now),
-		weightedScore(idx.entries["fresh"], 1.0, 1.0, now),
+		evictionScore(restored, now),
+		evictionScore(idx.entries["fresh"], now),
 		"restored (cold) keys should outrank freshly-set (warm) keys for eviction")
 }
 
@@ -175,4 +162,91 @@ func TestEvictionNoOpBelowThreshold(t *testing.T) {
 
 	_, err = s.Get("key1")
 	assert.NoError(t, err, "key1 should still exist")
+}
+
+// TestEvictionPartial fills to 120% of the threshold and expects one pass to
+// evict only enough keys to get back under it (regression: db.Size() is a
+// once-a-minute expvar, so the old loop deleted every key).
+func TestEvictionPartial(t *testing.T) {
+	const n, size = 20, 2 << 20
+	s := newEvictionTestStore(t, 50<<20)
+	s.cfg.EvictionThreshold = float64(n*size) / 1.2 / float64(s.cfg.MaxStorageBytes)
+
+	keys := make([]string, n)
+	for i := range keys {
+		keys[i] = fmt.Sprintf("k%02d", i)
+		require.NoError(t, s.Set(keys[i], make([]byte, size), 0))
+	}
+
+	require.NoError(t, checkEviction(context.Background(), s))
+	left, err := s.Exists(keys...)
+	require.NoError(t, err)
+	assert.Equal(t, int64(16), left, "40 MiB -> below 33.3 MiB needs exactly 4 evictions")
+	assert.Equal(t, int64(4), s.evictionsTotal.Load())
+
+	// A new write must survive the next two pressure ticks.
+	require.NoError(t, s.Set("fresh", make([]byte, size), 0))
+	for range 2 {
+		require.NoError(t, checkEviction(context.Background(), s))
+	}
+	_, err = s.Get("fresh")
+	assert.NoError(t, err, "fresh write was evicted")
+}
+
+// TestEvictionIgnoresExpiredBytes: expired TTL keys must not count as live
+// bytes, or eviction deletes live keys to make room the expired ones never use.
+func TestEvictionIgnoresExpiredBytes(t *testing.T) {
+	const size = 2 << 20
+	s := newEvictionTestStore(t, 50<<20)
+	s.cfg.EvictionThreshold = 0.6 // 30 MiB: 20 MiB live fits, 40 MiB live+expired does not
+
+	live := make([]string, 10)
+	for i := range live {
+		live[i] = fmt.Sprintf("live%02d", i)
+		require.NoError(t, s.Set(live[i], make([]byte, size), 0))
+	}
+	for i := range 10 {
+		require.NoError(t, s.Set(fmt.Sprintf("ttl%02d", i), make([]byte, size), 1))
+	}
+	time.Sleep(2100 * time.Millisecond) // Badger TTL has 1 s granularity
+
+	require.NoError(t, checkEviction(context.Background(), s))
+	n, err := s.Exists(live...)
+	require.NoError(t, err)
+	assert.Equal(t, int64(10), n, "live keys were evicted because of expired bytes")
+	assert.Zero(t, s.evictionsTotal.Load())
+	_, used := s.eviction.snapshot()
+	assert.Equal(t, int64(10*size), used)
+}
+
+// TestEvictionIndexRebuildsAfterRestart: after a reopen the index holds only
+// live keys, with live bytes close to what was written, and eviction is partial.
+func TestEvictionIndexRebuildsAfterRestart(t *testing.T) {
+	const n, size = 20, 2 << 20
+	cfg := baseStorageTestConfig(t)
+	cfg.MaxStorageBytes = 50 << 20
+	s, err := NewBadgerStore(cfg, nil)
+	require.NoError(t, err)
+	keys := make([]string, n)
+	for i := range keys {
+		keys[i] = fmt.Sprintf("k%02d", i)
+		require.NoError(t, s.Set(keys[i], make([]byte, size), 0))
+	}
+	require.NoError(t, s.Delete(keys[0]))
+	require.NoError(t, s.Close())
+
+	s, err = NewBadgerStore(cfg, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, s.Close()) })
+
+	_, used := s.eviction.snapshot()
+	assert.Len(t, s.eviction.entries, n-1, "deleted key must not be restored")
+	assert.GreaterOrEqual(t, used, int64((n-1)*size))
+	assert.Less(t, used, int64((n-1)*size+(n-1)*256), "restart size is value plus small per-key overhead")
+
+	s.cfg.EvictionThreshold = float64(used) / 1.2 / float64(s.cfg.MaxStorageBytes)
+	require.NoError(t, checkEviction(context.Background(), s))
+	left, err := s.Exists(keys...)
+	require.NoError(t, err)
+	assert.Equal(t, int64(n-1-4), left, "only enough keys to get under the threshold")
 }

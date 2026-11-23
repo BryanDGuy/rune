@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"syscall"
 	"testing"
 	"time"
 
@@ -16,13 +17,11 @@ import (
 func baseStorageTestConfig(t *testing.T) *config.Config {
 	t.Helper()
 	return &config.Config{
-		DataDir:            t.TempDir(),
-		MaxStorageBytes:    1024 * 1024 * 1024,
-		EvictionThreshold:  0.8,
-		EvictionSizeWeight: 1.0,
-		EvictionAgeWeight:  1.0,
-		GCInterval:         time.Hour,
-		GCDiscardRatio:     0.5,
+		DataDir:           t.TempDir(),
+		MaxStorageBytes:   1024 * 1024 * 1024,
+		EvictionThreshold: 0.8,
+		GCInterval:        time.Hour,
+		GCDiscardRatio:    0.5,
 	}
 }
 
@@ -172,4 +171,37 @@ func TestBadgerMetricsCounters(t *testing.T) {
 
 	assert.Contains(t, body, "rune_cache_hits_total 1")
 	assert.Contains(t, body, "rune_cache_misses_total 1")
+}
+
+func TestSetRejectsWhenDiskLow(t *testing.T) {
+	s := newTestStore(t)
+	s.cancel() // low disk wakes the loop, which would read statfs while this test swaps it
+	s.wg.Wait()
+	orig := statfs
+	t.Cleanup(func() { statfs = orig })
+	statfs = func(_ string, st *syscall.Statfs_t) error {
+		st.Bsize, st.Bavail, st.Blocks = 4096, 1, 1<<30
+		return nil
+	}
+
+	err := s.Set("big", make([]byte, 1<<20), 0)
+	require.ErrorIs(t, err, ErrInsufficientStorage)
+	ok, err := s.Exists("big")
+	require.NoError(t, err)
+	assert.Zero(t, ok)
+
+	statfs = orig
+	require.NoError(t, s.Set("big", make([]byte, 1<<20), 0), "store must stay usable")
+}
+
+func TestNewBadgerStoreClampsMaxToDisk(t *testing.T) {
+	cfg := baseStorageTestConfig(t)
+	cfg.MaxStorageBytes = 1 << 62
+	s, err := NewBadgerStore(cfg, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, s.Close()) })
+
+	_, total, err := diskSpace(cfg.DataDir)
+	require.NoError(t, err)
+	assert.Equal(t, total, cfg.MaxStorageBytes, "max storage should be clamped to the filesystem size")
 }

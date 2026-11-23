@@ -42,8 +42,9 @@ spec:
               value: "etcd:2379"
             - name: RUNE_DATA_DIR
               value: /var/rune/data
+            # PVC must be at least 2 x RUNE_MAX_STORAGE + 2 GiB (2 x 30 + 2 = 62 <= 64Gi).
             - name: RUNE_MAX_STORAGE
-              value: "50GB"
+              value: "30GB"
             # About 90% of the memory limit so the Go GC collects before the cgroup OOM-kills.
             - name: GOMEMLIMIT
               value: "6400MiB"

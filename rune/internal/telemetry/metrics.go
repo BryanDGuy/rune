@@ -16,6 +16,7 @@ type Metrics struct {
 	CacheHits      prometheus.Counter
 	CacheMisses    prometheus.Counter
 	EvictionsTotal prometheus.Counter
+	GCFlushErrors  prometheus.Counter
 	ActiveConns    prometheus.Gauge
 	GRPC           *grpc_prometheus.ServerMetrics
 	Registry       *prometheus.Registry
@@ -40,6 +41,10 @@ func New() *Metrics {
 		Name: "rune_evictions_total",
 		Help: "Keys evicted by the eviction loop.",
 	})
+	gcFlushErrors := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "rune_gc_flush_errors_total",
+		Help: "Forced memtable flushes before value-log GC that failed; disk is not reclaimed while these occur.",
+	})
 	activeConns := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "rune_active_connections",
 		Help: "Currently open gRPC connections.",
@@ -52,6 +57,7 @@ func New() *Metrics {
 		cacheHits,
 		cacheMisses,
 		evictions,
+		gcFlushErrors,
 		activeConns,
 		grpcMetrics,
 		collectors.NewGoCollector(),
@@ -62,10 +68,23 @@ func New() *Metrics {
 		CacheHits:      cacheHits,
 		CacheMisses:    cacheMisses,
 		EvictionsTotal: evictions,
+		GCFlushErrors:  gcFlushErrors,
 		ActiveConns:    activeConns,
 		GRPC:           grpcMetrics,
 		Registry:       reg,
 	}
+}
+
+// RegisterDiskFree registers a GaugeFunc that samples free bytes on the data
+// volume on each scrape; low free disk drives eviction and refuses Sets.
+func (m *Metrics) RegisterDiskFree(fn func() float64) {
+	m.Registry.MustRegister(prometheus.NewGaugeFunc(
+		prometheus.GaugeOpts{
+			Name: "rune_disk_free_bytes",
+			Help: "Free bytes on the data volume (statfs); NaN when statfs fails.",
+		},
+		fn,
+	))
 }
 
 // RegisterStorageSize registers a GaugeFunc that samples on-disk storage usage

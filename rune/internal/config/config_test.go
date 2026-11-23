@@ -16,8 +16,6 @@ func TestDefaults(t *testing.T) {
 	assert.Equal(t, "/var/rune/data", cfg.DataDir)
 	assert.Equal(t, int64(107374182400), cfg.MaxStorageBytes) // 100GB
 	assert.InDelta(t, 0.8, cfg.EvictionThreshold, 1e-9)
-	assert.InDelta(t, 1.0, cfg.EvictionSizeWeight, 1e-9)
-	assert.InDelta(t, 1.0, cfg.EvictionAgeWeight, 1e-9)
 	assert.Equal(t, 1024*1024, cfg.StreamChunkSize) // 1MB
 	assert.Equal(t, "info", cfg.LogLevel)
 }

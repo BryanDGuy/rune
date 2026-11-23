@@ -24,24 +24,22 @@ const (
 )
 
 type Config struct {
-	LogLevel           string
-	DataDir            string
-	NodeID             string
-	NodeAddr           string
-	EtcdEndpoints      []string
-	EvictionThreshold  float64
-	MaxStorageBytes    int64
-	EvictionSizeWeight float64
-	EvictionAgeWeight  float64
-	GCInterval         time.Duration
-	GCDiscardRatio     float64
-	Port               int
-	MetricsPort        int
-	StreamChunkSize    int
-	BlockCacheSize     int64
-	MaxValueBytes      int64
-	MaxInflightBytes   int64
-	GetIdleTimeout     time.Duration
+	LogLevel          string
+	DataDir           string
+	NodeID            string
+	NodeAddr          string
+	EtcdEndpoints     []string
+	EvictionThreshold float64
+	MaxStorageBytes   int64
+	GCInterval        time.Duration
+	GCDiscardRatio    float64
+	Port              int
+	MetricsPort       int
+	StreamChunkSize   int
+	BlockCacheSize    int64
+	MaxValueBytes     int64
+	MaxInflightBytes  int64
+	GetIdleTimeout    time.Duration
 }
 
 // LoadConfig builds a Config from environment variables, falling back to defaults.
@@ -54,8 +52,6 @@ type Config struct {
 //	RUNE_LOG_LEVEL          (default: info)
 //	RUNE_MAX_STORAGE        (default: 100GB)
 //	RUNE_EVICTION_THRESHOLD (default: 0.8)
-//	RUNE_EVICTION_SIZE_WEIGHT (default: 1.0)
-//	RUNE_EVICTION_AGE_WEIGHT  (default: 1.0)
 //	RUNE_STREAM_CHUNK_SIZE  (default: 1048576)
 //	RUNE_GC_INTERVAL        (default: 10m)
 //	RUNE_GC_DISCARD_RATIO   (default: 0.5)
@@ -68,20 +64,18 @@ type Config struct {
 //	RUNE_GET_IDLE_TIMEOUT   (default: 30s — a Get whose client reads nothing for this long is ended, releasing its bytes)
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
-		Port:               7946,
-		MetricsPort:        9090,
-		DataDir:            "/var/rune/data",
-		LogLevel:           "info",
-		MaxStorageBytes:    100 * 1024 * 1024 * 1024, // 100GB
-		EvictionThreshold:  0.8,
-		EvictionSizeWeight: 1.0,
-		EvictionAgeWeight:  1.0,
-		StreamChunkSize:    1024 * 1024, // 1MB
-		GCInterval:         10 * time.Minute,
-		GCDiscardRatio:     0.5,
-		MaxValueBytes:      DefaultMaxValueBytes,
-		MaxInflightBytes:   DefaultMaxInflightBytes,
-		GetIdleTimeout:     DefaultGetIdleTimeout,
+		Port:              7946,
+		MetricsPort:       9090,
+		DataDir:           "/var/rune/data",
+		LogLevel:          "info",
+		MaxStorageBytes:   100 * 1024 * 1024 * 1024, // 100GB
+		EvictionThreshold: 0.8,
+		StreamChunkSize:   1024 * 1024, // 1MB
+		GCInterval:        10 * time.Minute,
+		GCDiscardRatio:    0.5,
+		MaxValueBytes:     DefaultMaxValueBytes,
+		MaxInflightBytes:  DefaultMaxInflightBytes,
+		GetIdleTimeout:    DefaultGetIdleTimeout,
 	}
 
 	var err error
@@ -110,16 +104,6 @@ func LoadConfig() (*Config, error) {
 	if v := os.Getenv("RUNE_EVICTION_THRESHOLD"); v != "" {
 		if cfg.EvictionThreshold, err = strconv.ParseFloat(v, 64); err != nil {
 			return nil, fmt.Errorf("RUNE_EVICTION_THRESHOLD: %w", err)
-		}
-	}
-	if v := os.Getenv("RUNE_EVICTION_SIZE_WEIGHT"); v != "" {
-		if cfg.EvictionSizeWeight, err = strconv.ParseFloat(v, 64); err != nil {
-			return nil, fmt.Errorf("RUNE_EVICTION_SIZE_WEIGHT: %w", err)
-		}
-	}
-	if v := os.Getenv("RUNE_EVICTION_AGE_WEIGHT"); v != "" {
-		if cfg.EvictionAgeWeight, err = strconv.ParseFloat(v, 64); err != nil {
-			return nil, fmt.Errorf("RUNE_EVICTION_AGE_WEIGHT: %w", err)
 		}
 	}
 	if v := os.Getenv("RUNE_STREAM_CHUNK_SIZE"); v != "" {

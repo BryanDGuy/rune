@@ -17,14 +17,12 @@ import (
 func baseIntegrationConfig(t *testing.T) *config.Config {
 	t.Helper()
 	return &config.Config{
-		DataDir:            t.TempDir(),
-		Port:               0,
-		MaxStorageBytes:    1 << 30,
-		EvictionThreshold:  0.8,
-		EvictionSizeWeight: 1.0,
-		EvictionAgeWeight:  1.0,
-		GCInterval:         time.Hour,
-		GCDiscardRatio:     0.5,
+		DataDir:           t.TempDir(),
+		Port:              0,
+		MaxStorageBytes:   1 << 30,
+		EvictionThreshold: 0.8,
+		GCInterval:        time.Hour,
+		GCDiscardRatio:    0.5,
 	}
 }
 
@@ -46,6 +44,7 @@ func TestIntegrationMetricsScrape(t *testing.T) {
 	assert.Contains(t, body, "rune_cache_hits_total 1")
 	assert.Contains(t, body, "rune_cache_misses_total 1")
 	assert.Contains(t, body, "rune_storage_used_bytes")
+	assert.Contains(t, body, "rune_disk_free_bytes")
 }
 
 // TestIntegrationGRPCMetrics verifies that gRPC server metrics appear in the

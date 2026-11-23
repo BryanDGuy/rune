@@ -191,8 +191,6 @@ All configuration is via environment variables. All settings have sensible defau
 | `RUNE_LOG_LEVEL`             | `info`           | Log level                            |
 | `RUNE_MAX_STORAGE`           | `100GB`          | Storage limit (KB/MB/GB/TB)          |
 | `RUNE_EVICTION_THRESHOLD`    | `0.8`            | Fraction of max storage before eviction triggers |
-| `RUNE_EVICTION_SIZE_WEIGHT`  | `1.0`            | Weight of value size in eviction score |
-| `RUNE_EVICTION_AGE_WEIGHT`   | `1.0`            | Weight of time since last access in eviction score |
 | `RUNE_STREAM_CHUNK_SIZE`     | `1048576`        | gRPC stream chunk size in bytes (max `4194299`) |
 | `RUNE_MAX_VALUE_BYTES`       | `512MB`          | Largest value a Set may store (max `1073741823`); larger Sets fail with `ResourceExhausted` |
 | `RUNE_MAX_INFLIGHT_BYTES`    | `2GB`            | Server-wide cap on value bytes held by Set buffers and Get copies (at least `RUNE_MAX_VALUE_BYTES`); over it, requests fail with `ResourceExhausted` — treat as "not cached" |

@@ -34,16 +34,14 @@ type BufconnOptions struct {
 func BaseConfig(t *testing.T) *config.Config {
 	t.Helper()
 	return &config.Config{
-		DataDir:            t.TempDir(),
-		MaxStorageBytes:    1 << 30,
-		EvictionThreshold:  0.8,
-		EvictionSizeWeight: 1.0,
-		EvictionAgeWeight:  1.0,
-		StreamChunkSize:    1 << 20,
-		GCInterval:         time.Hour,
-		GCDiscardRatio:     0.5,
-		MaxValueBytes:      512 << 20,
-		MaxInflightBytes:   2 << 30,
+		DataDir:           t.TempDir(),
+		MaxStorageBytes:   1 << 30,
+		EvictionThreshold: 0.8,
+		StreamChunkSize:   1 << 20,
+		GCInterval:        time.Hour,
+		GCDiscardRatio:    0.5,
+		MaxValueBytes:     512 << 20,
+		MaxInflightBytes:  2 << 30,
 	}
 }
 

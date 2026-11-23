@@ -41,11 +41,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	requestedMax := cfg.MaxStorageBytes
 	store, err := storage.NewBadgerStore(cfg, m)
 	if err != nil {
 		_ = metricsLis.Close()
 		logger.Error("open storage", "err", err)
 		os.Exit(1)
+	}
+	store.SetLogger(logger)
+	if cfg.MaxStorageBytes < requestedMax {
+		logger.Warn("RUNE_MAX_STORAGE exceeds filesystem size; clamped", "requested_bytes", requestedMax, "effective_bytes", cfg.MaxStorageBytes)
 	}
 
 	srv, join, shutdown := buildServer(cfg, store, logger, m)

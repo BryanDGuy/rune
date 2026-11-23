@@ -463,3 +463,39 @@ func forwardingToStubPeer(t *testing.T) runev1.RuneServiceClient {
 	t.Cleanup(cleanup)
 	return runev1.NewRuneServiceClient(conn)
 }
+
+// Keys under the storage-reserved prefix would be dropped by GC's forced
+// flush, so every key-taking RPC must refuse them. The forwarding case proves
+// the check runs before forwarding (the stub peer would answer Unimplemented).
+func TestReservedKeyPrefixRejected(t *testing.T) {
+	local, cleanup := newTestClient(t)
+	defer cleanup()
+	for name, client := range map[string]runev1.RuneServiceClient{"local": local, "forwarding": forwardingToStubPeer(t)} {
+		t.Run(name, func(t *testing.T) { checkReservedKeyRejected(t, client) })
+	}
+}
+
+func checkReservedKeyRejected(t *testing.T, client runev1.RuneServiceClient) {
+	t.Helper()
+	ctx := context.Background()
+	key := storage.ReservedKeyPrefix + "x"
+
+	setStream, err := client.Set(ctx)
+	require.NoError(t, err)
+	require.NoError(t, setStream.Send(&runev1.SetRequest{
+		Payload: &runev1.SetRequest_Header{Header: &runev1.SetHeader{Key: key}},
+	}))
+	_, err = setStream.CloseAndRecv()
+	assert.Equal(t, codes.InvalidArgument, status.Code(err), "set: %v", err)
+
+	getStream, err := client.Get(ctx, &runev1.GetRequest{Key: key})
+	require.NoError(t, err)
+	_, err = getStream.Recv()
+	assert.Equal(t, codes.InvalidArgument, status.Code(err), "get: %v", err)
+
+	_, err = client.Delete(ctx, &runev1.DeleteRequest{Keys: []string{"ok", key}})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err), "delete: %v", err)
+
+	_, err = client.Exists(ctx, &runev1.ExistsRequest{Keys: []string{"ok", key}})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err), "exists: %v", err)
+}
