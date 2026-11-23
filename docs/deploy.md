@@ -65,7 +65,7 @@ Notes:
 - NetworkPolicy is enforced only if your CNI supports it (Calico, Cilium and others do; some basic setups do not). Check that a pod without the client label really cannot connect to 7946.
 - The probes are sent by the kubelet from the node. Most CNIs allow node-to-pod traffic regardless of policy, but this was not tested on any particular CNI.
 - `Info` and `/metrics` expose capacity and hit-rate data. They are covered by the same policy.
-- The policies restrict ingress only. If your namespace denies egress by default, Rune also needs egress to kube-dns (53 UDP/TCP), etcd (2379) and Rune pods (7946). Without it, startup hangs without logging (see Probes).
+- The policies restrict ingress only. If your namespace denies egress by default, Rune also needs egress to kube-dns (53 UDP/TCP), etcd (2379) and Rune pods (7946). Without egress to DNS or etcd, startup fails: the process logs `start membership` and exits after about 30 s (see Probes). Without egress to Rune pods, forwarded requests fail with `Unavailable`.
 
 ## Key contract: keys are write-once
 
