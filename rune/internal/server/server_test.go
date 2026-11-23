@@ -440,6 +440,7 @@ func TestForwardedDeleteExistsPassPeerStatus(t *testing.T) {
 
 	_, err := client.Delete(context.Background(), &runev1.DeleteRequest{Keys: []string{"k"}})
 	assert.Equal(t, codes.Unimplemented, status.Code(err), "delete: %v", err)
+	require.ErrorContains(t, err, "Unimplemented", "the joined message names each peer's code")
 	_, err = client.Exists(context.Background(), &runev1.ExistsRequest{Keys: []string{"k"}})
 	assert.Equal(t, codes.Unimplemented, status.Code(err), "exists: %v", err)
 }

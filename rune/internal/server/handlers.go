@@ -73,7 +73,9 @@ func (h *handler) Get(req *runev1.GetRequest, stream grpc.ServerStreamingServer[
 	}
 	var charged int64
 	defer func() { h.srv.release(charged) }()
+	var size int64
 	value, err := h.srv.store.GetReserved(req.Key, func(n int64) bool {
+		size = n
 		if !h.srv.reserve(n) {
 			return false
 		}
@@ -82,6 +84,10 @@ func (h *handler) Get(req *runev1.GetRequest, stream grpc.ServerStreamingServer[
 	})
 	if errors.Is(err, storage.ErrNotFound) {
 		return status.Error(codes.NotFound, "key not found")
+	}
+	if errors.Is(err, storage.ErrOverBudget) && size > h.srv.maxInflightBytes {
+		// Stored before the limits were lowered: it can never fit, so retrying won't help.
+		return status.Errorf(codes.FailedPrecondition, "value of %d bytes exceeds the server memory budget", size)
 	}
 	if errors.Is(err, storage.ErrOverBudget) {
 		return status.Error(codes.ResourceExhausted, "server memory budget exhausted")
@@ -266,7 +272,7 @@ func (h *handler) Delete(ctx context.Context, req *runev1.DeleteRequest) (*runev
 	}
 	// shortcut: peers are contacted sequentially; parallelise if ring size makes latency matter.
 	var errs []error
-	code := codes.OK // the first peer's status code, passed through
+	code := codes.OK // the failed peers' shared status code, or Unavailable if they differ
 	for _, node := range h.srv.membership.Ring().Nodes() {
 		if node.ID == h.srv.membership.NodeID() {
 			continue
@@ -278,10 +284,12 @@ func (h *handler) Delete(ctx context.Context, req *runev1.DeleteRequest) (*runev
 			cancel()
 		}
 		if err != nil {
-			if code == codes.OK {
-				code = status.Code(err)
+			if c := status.Code(err); code == codes.OK {
+				code = c
+			} else if code != c {
+				code = codes.Unavailable // peer order is random, so don't let it pick the code
 			}
-			errs = append(errs, fmt.Errorf("%s: %s", node.ID, status.Convert(err).Message()))
+			errs = append(errs, fmt.Errorf("%s: %s: %s", node.ID, status.Code(err), status.Convert(err).Message()))
 		}
 	}
 	if len(errs) > 0 {

@@ -132,6 +132,23 @@ func setLocal(t *testing.T, conn *grpc.ClientConn, key string) {
 	require.NoError(t, err)
 }
 
+// TestIntegrationClusterDeleteMixedPeerFailures: when peers fail with different
+// codes, Delete returns Unavailable (not whichever peer came first) and names
+// every failed peer with its own code.
+func TestIntegrationClusterDeleteMixedPeerFailures(t *testing.T) {
+	conns, ring, stops := testutil.NewBufconnCluster(t, 3)
+	stops[2]() // node-2: Unavailable
+	lis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = lis.Close() })
+	ring.Add(router.Node{ID: "node-hung", Addr: lis.Addr().String()}) // DeadlineExceeded
+
+	_, err = runev1.NewRuneServiceClient(conns[0]).Delete(t.Context(), &runev1.DeleteRequest{Keys: []string{"k"}})
+	require.Equal(t, codes.Unavailable, status.Code(err), "%v", err)
+	require.ErrorContains(t, err, "node-hung: DeadlineExceeded")
+	require.ErrorContains(t, err, "node-2: Unavailable")
+}
+
 // TestIntegrationClusterPeerHangs: a ring member that accepts TCP but never
 // answers must not hang Delete or Exists past the per-peer timeout.
 func TestIntegrationClusterPeerHangs(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bryandguy/rune/rune/internal/config"
+	"github.com/bryandguy/rune/rune/internal/storage"
 	"github.com/bryandguy/rune/rune/test/testutil"
 	runev1 "github.com/bryandguy/rune/sdk/go/gen/rune/v1"
 	"github.com/stretchr/testify/assert"
@@ -185,6 +186,19 @@ func TestGetRespectsMemoryBudget(t *testing.T) {
 	cancel()
 	assert.Eventually(t, func() bool { return getCode(t, client, "v") == codes.OK }, 5*time.Second, 20*time.Millisecond,
 		"Get must succeed once the held Set releases its bytes")
+}
+
+// TestGetLargerThanBudgetIsPermanent: a value stored before the limits were
+// lowered can never fit, so Get must not tell the caller to retry later.
+func TestGetLargerThanBudgetIsPermanent(t *testing.T) {
+	cfg := testutil.BaseConfig(t)
+	store, err := storage.NewBadgerStore(cfg, nil)
+	require.NoError(t, err)
+	require.NoError(t, store.Set("big", make([]byte, 8<<20), 0))
+	require.NoError(t, store.Close())
+
+	client := runev1.NewRuneServiceClient(limitedConn(t, 4<<20, 4<<20, nil, func(c *config.Config) { c.DataDir = cfg.DataDir }))
+	assert.Equal(t, codes.FailedPrecondition, getCode(t, client, "big"))
 }
 
 func TestRejectedGetsDoNotCopyValue(t *testing.T) {
