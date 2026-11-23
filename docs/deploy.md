@@ -100,7 +100,7 @@ Disk protection, in order:
 - If a Set would leave less than about 0.75 GiB free (the space GC needs to rewrite a file), it is refused with `ResourceExhausted` and nothing is stored.
 - If `RUNE_MAX_STORAGE` is larger than the volume, Rune clamps it to the volume size and logs `WARN "RUNE_MAX_STORAGE exceeds filesystem size; clamped"` with `requested_bytes` and `effective_bytes`. On a volume sized by the 2x rule this never happens.
 
-Use a dedicated volume. Rune measures free space on the whole filesystem. If something else fills it, Rune evicts its cache (about 2 GiB per pass) and refuses writes, and it cannot recover that space.
+Use a dedicated volume. Rune measures free space on the whole filesystem. If something else fills it, Rune evicts its cache (up to about 3.75 GiB per pass, to get back to about 3.75 GiB free) and refuses writes, and it cannot recover that space.
 
 A refused Set returns `ResourceExhausted`, which callers treat as "not cached" (see the caller contract under "Memory"). Brief bursts of refusals can happen the first time a node's disk fills (measured: one burst of about 9-30 s), then rarely and for a few seconds. On a volume sized by the 2x rule, the disk-pressure path should not engage (not measured).
 
