@@ -60,6 +60,7 @@ func New(cfg *config.Config, store storage.Storage, logger *logging.Logger, clus
 
 	s.grpcServer = grpc.NewServer(
 		grpc.StatsHandler(s.tracker),
+		grpc.WaitForHandlers(true), // hard Stop must not return while a handler can still touch the store
 		grpc.ChainUnaryInterceptor(unaryInterceptors...),
 		grpc.ChainStreamInterceptor(streamInterceptors...),
 	)
@@ -83,8 +84,13 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("listen: %w", err)
 	}
 	go func() { _ = s.grpcServer.Serve(lis) }()
-	s.healthServer.SetServingStatus(ReadinessService, healthpb.HealthCheckResponse_SERVING)
 	return nil
+}
+
+// MarkReady flips readiness to SERVING. Call it once the node can route keys
+// (after joining the ring in cluster mode).
+func (s *Server) MarkReady() {
+	s.healthServer.SetServingStatus(ReadinessService, healthpb.HealthCheckResponse_SERVING)
 }
 
 // StartOnListener serves on an existing listener (useful for testing with bufconn).

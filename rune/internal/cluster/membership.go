@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -12,13 +13,20 @@ import (
 	"github.com/bryandguy/rune/rune/internal/logging"
 	"github.com/bryandguy/rune/rune/internal/router"
 	"go.etcd.io/etcd/api/v3/mvccpb"
+	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 const (
 	leaseTTLSeconds   = 10
 	reregisterBackoff = time.Second
+	// LeaseTTL is how long peers keep this node in their rings if it stops without revoking its lease.
+	LeaseTTL = leaseTTLSeconds * time.Second
 )
+
+// startTimeout bounds Start's etcd calls so an unreachable etcd fails startup loudly.
+// A var only so tests can shorten it.
+var startTimeout = 30 * time.Second
 
 // etcdClient is the subset of *clientv3.Client methods used by Membership.
 // Tests inject a fake.
@@ -35,21 +43,22 @@ type etcdClient interface {
 type MembershipIface interface {
 	Ring() *router.Router
 	NodeID() string
-	Stop()
 }
 
 // Membership watches etcd for node join/leave events and keeps a router.Router current.
 // If nodeAddr is non-empty, it also registers this node in etcd (server mode).
 // If nodeAddr is empty, it only watches (client mode).
 type Membership struct {
-	store    etcdClient
-	ring     *router.Router
-	cancel   context.CancelFunc
-	logger   *logging.Logger
-	nodeID   string
-	nodeAddr string
-	leaseID  atomic.Int64
-	wg       sync.WaitGroup
+	store  etcdClient
+	ring   *router.Router
+	cancel context.CancelFunc
+	logger *logging.Logger
+	// OnPeerLeave, if set before Start, is called with a peer's address when it leaves the ring.
+	OnPeerLeave func(addr string)
+	nodeID      string
+	nodeAddr    string
+	leaseID     atomic.Int64
+	wg          sync.WaitGroup
 }
 
 // New builds a Membership. A nil logger discards all log output.
@@ -70,15 +79,18 @@ func New(store etcdClient, nodeID, nodeAddr string, logger *logging.Logger) *Mem
 // ring from the current etcd state, then watches for changes in the background.
 func (m *Membership) Start(ctx context.Context) error {
 	ctx, m.cancel = context.WithCancel(ctx)
+	// Only the startup etcd calls are bounded; the background loops live on ctx.
+	initCtx, initCancel := context.WithTimeout(ctx, startTimeout)
+	defer initCancel()
 
 	if m.nodeAddr != "" {
-		if err := m.register(ctx); err != nil {
+		if err := m.register(ctx, initCtx); err != nil {
 			m.cancel()
 			return fmt.Errorf("register: %w", err)
 		}
 	}
 
-	rev, err := m.populate(ctx)
+	rev, err := m.populate(initCtx)
 	if err != nil {
 		m.cancel()
 		m.wg.Wait()
@@ -94,8 +106,8 @@ func (m *Membership) Start(ctx context.Context) error {
 	return nil
 }
 
-func (m *Membership) register(ctx context.Context) error {
-	if err := m.grantAndPut(ctx); err != nil {
+func (m *Membership) register(ctx, initCtx context.Context) error {
+	if err := m.grantAndPut(initCtx); err != nil {
 		return err
 	}
 	m.logger.Info("registered in cluster", "addr", m.nodeAddr, "lease", m.leaseID.Load())
@@ -181,7 +193,7 @@ func (m *Membership) populate(ctx context.Context) (int64, error) {
 
 func (m *Membership) watchLoop(ctx context.Context, rev int64) {
 	for {
-		opts := []clientv3.OpOption{clientv3.WithPrefix(), clientv3.WithRev(rev + 1)}
+		opts := []clientv3.OpOption{clientv3.WithPrefix(), clientv3.WithRev(rev + 1), clientv3.WithPrevKV()}
 		wch := m.store.Watch(ctx, router.NodeKeyPrefix, opts...)
 		for wresp := range wch {
 			if wresp.Err() != nil {
@@ -198,6 +210,7 @@ func (m *Membership) watchLoop(ctx context.Context, rev int64) {
 					m.ring.Remove(nodeID)
 					if nodeID != m.nodeID {
 						m.logger.Info("peer left", "peer_id", nodeID)
+						m.peerLeft(ev.PrevKv)
 					}
 				}
 			}
@@ -224,6 +237,14 @@ func (m *Membership) watchLoop(ctx context.Context, rev int64) {
 	}
 }
 
+func (m *Membership) peerLeft(prev *mvccpb.KeyValue) {
+	var node router.Node
+	if m.OnPeerLeave == nil || prev == nil || json.Unmarshal(prev.Value, &node) != nil {
+		return
+	}
+	m.OnPeerLeave(node.Addr)
+}
+
 func (m *Membership) applyPut(val []byte) (nodeID string, ok bool) {
 	var node router.Node
 	if err := json.Unmarshal(val, &node); err != nil {
@@ -242,14 +263,24 @@ func (m *Membership) NodeID() string {
 	return m.nodeID
 }
 
-func (m *Membership) Stop() {
+// Stop ends the watch and leaves the ring. A non-nil error means the lease revoke
+// failed, so peers keep this node in their rings for up to LeaseTTL.
+func (m *Membership) Stop() error {
 	if m.cancel != nil {
 		m.cancel()
 	}
 	m.wg.Wait()
-	if m.leaseID.Load() != 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_, _ = m.store.Revoke(ctx, clientv3.LeaseID(m.leaseID.Load()))
+	if m.leaseID.Load() == 0 {
+		return nil
 	}
+	// The watch is already stopped, so drop self here: while draining, this node
+	// forwards its former keys to their new owners instead of serving them locally.
+	m.ring.Remove(m.nodeID)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := m.store.Revoke(ctx, clientv3.LeaseID(m.leaseID.Load()))
+	if errors.Is(err, rpctypes.ErrLeaseNotFound) {
+		return nil // already revoked or expired: peers no longer list this node
+	}
+	return err
 }

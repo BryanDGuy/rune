@@ -5,10 +5,13 @@ import (
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func noopContextDialer(_ context.Context, _ string) (net.Conn, error) { return nil, nil }
@@ -73,4 +76,42 @@ func TestPeerDialerConcurrentDial(t *testing.T) {
 	for _, c := range conns {
 		assert.Same(t, conns[0], c)
 	}
+}
+
+func TestPeerDialerForgetRedials(t *testing.T) {
+	d := NewPeerDialer()
+	defer d.Close()
+
+	opts := &DialOptions{ContextDialer: noopContextDialer}
+	conn1, err := d.Dial("host1:7946", opts)
+	require.NoError(t, err)
+
+	d.Forget("host1:7946")
+
+	conn2, err := d.Dial("host1:7946", opts)
+	require.NoError(t, err)
+	assert.NotSame(t, conn1, conn2, "a departed peer must get a fresh connection when it rejoins")
+}
+
+// TestPeerDialerForgetKeepsInjectedConnOpen: an injected conn belongs to its
+// creator, so Forget drops it from the pool but never closes it.
+func TestPeerDialerForgetKeepsInjectedConnOpen(t *testing.T) {
+	prev := forgetCloseDelay
+	forgetCloseDelay = 0
+	t.Cleanup(func() { forgetCloseDelay = prev })
+	d := NewPeerDialer()
+	defer d.Close()
+
+	injected, err := grpc.NewClient("passthrough:///injected", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = injected.Close() })
+	require.NoError(t, d.DialWith("host1:7946", injected))
+
+	d.Forget("host1:7946")
+	time.Sleep(50 * time.Millisecond) // a scheduled close would have run by now
+
+	assert.NotEqual(t, connectivity.Shutdown, injected.GetState(), "injected conn must not be closed")
+	fresh, err := d.Dial("host1:7946", &DialOptions{ContextDialer: noopContextDialer})
+	require.NoError(t, err)
+	assert.NotSame(t, injected, fresh, "injected conn must be dropped from the pool")
 }

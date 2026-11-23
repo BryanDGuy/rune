@@ -208,7 +208,7 @@ Rune registers the standard [gRPC Health Checking Protocol](https://github.com/g
 | Service | Meaning |
 |---------|---------|
 | `""` (empty) | Liveness — process is alive (always SERVING) |
-| `"rune"` | Readiness — SERVING once the server is up, NOT_SERVING during shutdown |
+| `"rune"` | Readiness — SERVING once the node can route keys (after joining the ring in cluster mode, up to 30 s), NOT_SERVING during shutdown |
 
 ## What Rune is not
 

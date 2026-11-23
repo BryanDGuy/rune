@@ -6,10 +6,16 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+// forgetCloseDelay outlives a departing peer's longest shutdown after peers see it
+// leave (5 s revoke + 12 s wait when the revoke fails + 30 s drain), so forwards
+// already in flight on the old connection can finish. A var only so tests can shorten it.
+var forgetCloseDelay = 50 * time.Second
 
 var errDialerClosed = errors.New("cluster: PeerDialer is closed")
 
@@ -80,6 +86,23 @@ func (d *PeerDialer) DialWith(addr string, conn *grpc.ClientConn) error {
 	d.conns[addr] = conn
 	d.injected[addr] = true
 	return nil
+}
+
+// Forget drops the pooled connection to addr so the next Dial re-resolves it,
+// and closes the old connection after forgetCloseDelay.
+func (d *PeerDialer) Forget(addr string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	conn, ok := d.conns[addr]
+	if !ok {
+		return
+	}
+	delete(d.conns, addr)
+	if d.injected[addr] {
+		delete(d.injected, addr)
+		return
+	}
+	time.AfterFunc(forgetCloseDelay, func() { _ = conn.Close() })
 }
 
 func (d *PeerDialer) Close() {

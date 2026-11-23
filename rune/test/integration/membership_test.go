@@ -84,12 +84,12 @@ func TestEtcdMembershipJoin(t *testing.T) {
 	// node-1 registers itself.
 	m1 := cluster.New(newEtcdClient(t, endpoint), "node-1", "host1:7946", nil)
 	require.NoError(t, m1.Start(ctx))
-	t.Cleanup(m1.Stop)
+	t.Cleanup(func() { _ = m1.Stop() })
 
 	// node-2 is watch-only — it should see node-1 after Start.
 	m2 := cluster.New(newEtcdClient(t, endpoint), "node-2", "", nil)
 	require.NoError(t, m2.Start(ctx))
-	t.Cleanup(m2.Stop)
+	t.Cleanup(func() { _ = m2.Stop() })
 
 	got, err := m2.Ring().Lookup("any-key")
 	require.NoError(t, err)
@@ -104,11 +104,11 @@ func TestEtcdMembershipTwoNodes(t *testing.T) {
 
 	m1 := cluster.New(newEtcdClient(t, endpoint), "node-1", "host1:7946", nil)
 	require.NoError(t, m1.Start(ctx))
-	t.Cleanup(m1.Stop)
+	t.Cleanup(func() { _ = m1.Stop() })
 
 	m2 := cluster.New(newEtcdClient(t, endpoint), "node-2", "host2:7946", nil)
 	require.NoError(t, m2.Start(ctx))
-	t.Cleanup(m2.Stop)
+	t.Cleanup(func() { _ = m2.Stop() })
 
 	// Both rings should converge to 2 nodes.
 	assert.Eventually(t, func() bool { return m1.Ring().Len() == 2 }, 5*time.Second, 20*time.Millisecond)
@@ -126,18 +126,44 @@ func TestEtcdMembershipLeave(t *testing.T) {
 
 	m2 := cluster.New(newEtcdClient(t, endpoint), "node-2", "host2:7946", nil)
 	require.NoError(t, m2.Start(ctx))
-	t.Cleanup(m2.Stop)
+	t.Cleanup(func() { _ = m2.Stop() })
 
 	// Wait for both rings to see each other.
 	require.Eventually(t, func() bool { return m1.Ring().Len() == 2 }, 5*time.Second, 20*time.Millisecond)
 	require.Eventually(t, func() bool { return m2.Ring().Len() == 2 }, 5*time.Second, 20*time.Millisecond)
 
 	// node-1 cleanly leaves — lease revoke sends a DELETE event.
-	m1.Stop()
+	require.NoError(t, m1.Stop())
 
 	assert.Eventually(t, func() bool { return m2.Ring().Len() == 1 }, 5*time.Second, 20*time.Millisecond)
 
 	got, err := m2.Ring().Lookup("any-key")
 	require.NoError(t, err)
 	assert.Equal(t, "node-2", got.ID)
+}
+
+// TestEtcdMembershipPeerLeaveCallback verifies OnPeerLeave receives the departed
+// peer's address, so its pooled connection can be dropped.
+func TestEtcdMembershipPeerLeaveCallback(t *testing.T) {
+	endpoint := startEmbeddedEtcd(t)
+	ctx := t.Context()
+
+	left := make(chan string, 1)
+	m2 := cluster.New(newEtcdClient(t, endpoint), "node-2", "host2:7946", nil)
+	m2.OnPeerLeave = func(addr string) { left <- addr }
+	require.NoError(t, m2.Start(ctx))
+	t.Cleanup(func() { _ = m2.Stop() })
+
+	m1 := cluster.New(newEtcdClient(t, endpoint), "node-1", "host1:7946", nil)
+	require.NoError(t, m1.Start(ctx))
+	require.Eventually(t, func() bool { return m2.Ring().Len() == 2 }, 5*time.Second, 20*time.Millisecond)
+
+	require.NoError(t, m1.Stop())
+
+	select {
+	case addr := <-left:
+		assert.Equal(t, "host1:7946", addr)
+	case <-time.After(5 * time.Second):
+		t.Fatal("OnPeerLeave not called")
+	}
 }
