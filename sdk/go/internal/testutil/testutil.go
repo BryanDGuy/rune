@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	runev1 "github.com/bryandguy/rune/sdk/go/gen/rune/v1"
 	"github.com/stretchr/testify/require"
@@ -27,6 +28,8 @@ type BufconnOptions struct {
 	// ForwardTo makes this server forward all key operations to the given peer
 	// and set x-rune-owner to the peer's target address.
 	ForwardTo *grpc.ClientConn
+	// MaxValueBytes makes Set fail with ResourceExhausted once a value exceeds it.
+	MaxValueBytes int
 }
 
 // NewBufconnConn starts a minimal in-process Rune server and returns a dialed
@@ -37,9 +40,12 @@ func NewBufconnConn(t *testing.T, bufSize int, opts *BufconnOptions) (*grpc.Clie
 	addr := fmt.Sprintf("passthrough://bufnet-%d", testSeq.Add(1))
 	lis := bufconn.Listen(bufSize)
 
-	srv := &memServer{store: make(map[string][]byte), addr: addr}
+	srv := &memServer{store: make(map[string][]byte), expiry: make(map[string]time.Time), addr: addr}
 	if opts != nil && opts.ForwardTo != nil {
 		srv.forward = opts.ForwardTo
+	}
+	if opts != nil {
+		srv.maxValue = opts.MaxValueBytes
 	}
 
 	grpcSrv := grpc.NewServer()
@@ -64,10 +70,12 @@ func NewBufconnConn(t *testing.T, bufSize int, opts *BufconnOptions) (*grpc.Clie
 
 type memServer struct {
 	runev1.UnimplementedRuneServiceServer
-	store   map[string][]byte
-	forward *grpc.ClientConn
-	addr    string
-	mu      sync.RWMutex
+	store    map[string][]byte
+	expiry   map[string]time.Time
+	forward  *grpc.ClientConn
+	addr     string
+	maxValue int
+	mu       sync.RWMutex
 }
 
 func (s *memServer) ownerAddr() string {
@@ -84,6 +92,9 @@ func (s *memServer) Get(req *runev1.GetRequest, stream grpc.ServerStreamingServe
 	}
 	s.mu.RLock()
 	val, ok := s.store[req.Key]
+	if exp, has := s.expiry[req.Key]; has && time.Now().After(exp) {
+		ok = false
+	}
 	s.mu.RUnlock()
 	if !ok {
 		return status.Error(codes.NotFound, "key not found")
@@ -125,6 +136,7 @@ func (s *memServer) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, run
 		return s.proxySet(stream)
 	}
 	var key string
+	var ttl int64
 	var val []byte
 	for {
 		req, err := stream.Recv()
@@ -137,12 +149,20 @@ func (s *memServer) Set(stream grpc.ClientStreamingServer[runev1.SetRequest, run
 		switch p := req.Payload.(type) {
 		case *runev1.SetRequest_Header:
 			key = p.Header.Key
+			ttl = p.Header.TtlSeconds
 		case *runev1.SetRequest_Chunk:
 			val = append(val, p.Chunk...)
+			if s.maxValue > 0 && len(val) > s.maxValue {
+				return status.Error(codes.ResourceExhausted, "value too large")
+			}
 		}
 	}
 	s.mu.Lock()
 	s.store[key] = val
+	delete(s.expiry, key)
+	if ttl > 0 {
+		s.expiry[key] = time.Now().Add(time.Duration(ttl) * time.Second)
+	}
 	s.mu.Unlock()
 	return stream.SendAndClose(&runev1.SetResponse{})
 }

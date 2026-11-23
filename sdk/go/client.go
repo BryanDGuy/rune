@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"time"
 
 	runev1 "github.com/bryandguy/rune/sdk/go/gen/rune/v1"
 	"google.golang.org/grpc"
@@ -27,50 +26,7 @@ func NewClient(conn *grpc.ClientConn) *Client {
 
 // Chunked via client-streaming gRPC in 1MB pieces.
 func (c *Client) Set(ctx context.Context, key string, r io.Reader, opts *SetOptions) error {
-	var ttl time.Duration
-	var callOpts []grpc.CallOption
-	if opts != nil {
-		ttl = opts.TTL
-		if opts.Compress {
-			callOpts = append(callOpts, grpc.UseCompressor("gzip"))
-		}
-	}
-
-	stream, err := c.grpc.Set(ctx, callOpts...)
-	if err != nil {
-		return err
-	}
-
-	if err = stream.Send(&runev1.SetRequest{
-		Payload: &runev1.SetRequest_Header{
-			Header: &runev1.SetHeader{
-				Key:        key,
-				TtlSeconds: int64(ttl.Seconds()),
-			},
-		},
-	}); err != nil {
-		return err
-	}
-
-	buf := make([]byte, chunkSize)
-	for {
-		n, readErr := io.ReadFull(r, buf)
-		if n > 0 {
-			if err = stream.Send(&runev1.SetRequest{
-				Payload: &runev1.SetRequest_Chunk{Chunk: buf[:n]},
-			}); err != nil {
-				return err
-			}
-		}
-		if errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF) {
-			break
-		}
-		if readErr != nil {
-			return readErr
-		}
-	}
-
-	_, err = stream.CloseAndRecv()
+	_, err := clusterSet(ctx, c, key, r, opts)
 	return err
 }
 

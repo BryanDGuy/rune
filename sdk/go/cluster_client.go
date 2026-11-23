@@ -273,7 +273,17 @@ func clusterSet(ctx context.Context, c *Client, key string, r io.Reader, opts *S
 			callOpts = append(callOpts, grpc.UseCompressor("gzip"))
 		}
 	}
+	if ttl < 0 {
+		return nil, errors.New("runesdk: negative TTL")
+	}
+	ttlSeconds := int64(ttl.Seconds())
+	if ttl > 0 {
+		ttlSeconds = max(ttlSeconds, 1) // the protocol has whole seconds; 0 means no expiry
+	}
 
+	// Canceling on any early return aborts the stream, so the server never commits a partial value.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	stream, err := c.grpc.Set(ctx, callOpts...)
 	if err != nil {
 		return nil, err
@@ -283,24 +293,30 @@ func clusterSet(ctx context.Context, c *Client, key string, r io.Reader, opts *S
 		Payload: &runev1.SetRequest_Header{
 			Header: &runev1.SetHeader{
 				Key:        key,
-				TtlSeconds: int64(ttl.Seconds()),
+				TtlSeconds: ttlSeconds,
 			},
 		},
 	}); err != nil {
+		if errors.Is(err, io.EOF) { // the server ended the stream; its status comes from Recv
+			_, err = stream.CloseAndRecv()
+		}
 		return nil, err
 	}
 
 	buf := make([]byte, chunkSize)
 	for {
-		n, readErr := io.ReadFull(r, buf)
+		n, readErr := r.Read(buf)
 		if n > 0 {
 			if err = stream.Send(&runev1.SetRequest{
 				Payload: &runev1.SetRequest_Chunk{Chunk: buf[:n]},
 			}); err != nil {
+				if errors.Is(err, io.EOF) {
+					_, err = stream.CloseAndRecv()
+				}
 				return nil, err
 			}
 		}
-		if errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF) {
+		if errors.Is(readErr, io.EOF) {
 			break
 		}
 		if readErr != nil {

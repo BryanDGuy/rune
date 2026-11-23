@@ -10,6 +10,7 @@ import (
 var ErrNotFound = errors.New("key not found")
 
 type SetOptions struct {
+	// TTL is sent in whole seconds (truncated). 0 means no expiry, 0 < TTL < 1s becomes 1s, and a negative TTL is an error.
 	TTL      time.Duration
 	Compress bool
 }
