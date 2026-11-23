@@ -101,6 +101,8 @@ Rune buffers each whole value in memory on Set and on Get. Two limits bound this
 - `RUNE_MAX_VALUE_BYTES` (default `512MB`, maximum `1073741823`, Badger's value limit): a larger Set fails with `ResourceExhausted` and nothing is stored.
 - `RUNE_MAX_INFLIGHT_BYTES` (default `2GB`, must be at least `RUNE_MAX_VALUE_BYTES`): a server-wide budget for buffered Set and Get value bytes. A request that would exceed it fails at once with `ResourceExhausted`; it does not wait. A Set is charged its buffer capacity, so with the defaults a node admits 4 concurrent Sets of 257-512 MB.
 
+**Caller contract: `ResourceExhausted` means "not cached".** Serve the value from its source and try caching it again later. Do not treat it as a fatal error.
+
 If you lower `RUNE_MAX_INFLIGHT_BYTES` below the size of values already stored, a Get of such a value fails with `FailedPrecondition` (it can never fit, so retrying won't help) until the key expires or is evicted. Treat it like a miss.
 
 Peak memory is above the budget, because Badger's write copy is not charged and Set buffer growth leaves garbage. Measured on one node with the defaults (12 concurrent 400 MiB Sets, data dir on tmpfs): about 3.3x the budget with Go's default GC, about 2x with `GOMEMLIMIT` at 1.25x the budget. Size the container memory limit at about **3.5x `RUNE_MAX_INFLIGHT_BYTES`**, or about **2x** if you set `GOMEMLIMIT` to about 1.25x the budget, plus the block cache (`RUNE_BLOCK_CACHE_SIZE`).
