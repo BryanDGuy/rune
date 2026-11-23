@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rune
+  labels:
+    app.kubernetes.io/name: rune
+spec:
+  clusterIP: None
+  # Ring membership comes from etcd, not readiness. Publishing DNS for unready pods
+  # avoids the peer resolver backoff seen when a restarted pod's record is missing.
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: rune
+  ports:
+    - name: grpc
+      port: 7946
+      targetPort: grpc
+    - name: metrics
+      port: 9090
+      targetPort: metrics

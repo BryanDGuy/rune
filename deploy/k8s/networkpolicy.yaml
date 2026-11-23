@@ -1,0 +1,55 @@
+# Rune has no auth or TLS. These policies are what keep it inside the trust boundary.
+# Replace the example client and Prometheus selectors with your real workloads.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rune
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: rune
+  policyTypes: ["Ingress"]
+  ingress:
+    - ports:
+        - port: 7946
+      from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: rune
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: example-rune-client
+    - ports:
+        - port: 9090
+      from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+---
+# Only correct if etcd runs in this namespace and serves Rune alone; see docs/deploy.md.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rune-etcd
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: etcd
+  policyTypes: ["Ingress"]
+  ingress:
+    - ports:
+        - port: 2379
+      from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: rune
+    # etcd member-to-member traffic; without this a multi-member etcd loses quorum.
+    - ports:
+        - port: 2380
+      from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: etcd

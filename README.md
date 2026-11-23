@@ -193,7 +193,7 @@ All configuration is via environment variables. All settings have sensible defau
 | `RUNE_EVICTION_THRESHOLD`    | `0.8`            | Fraction of max storage before eviction triggers |
 | `RUNE_EVICTION_SIZE_WEIGHT`  | `1.0`            | Weight of value size in eviction score |
 | `RUNE_EVICTION_AGE_WEIGHT`   | `1.0`            | Weight of time since last access in eviction score |
-| `RUNE_STREAM_CHUNK_SIZE`     | `1048576`        | gRPC stream chunk size in bytes      |
+| `RUNE_STREAM_CHUNK_SIZE`     | `1048576`        | gRPC stream chunk size in bytes (max `4194299`) |
 | `RUNE_MAX_VALUE_BYTES`       | `512MB`          | Largest value a Set may store (max `1073741823`); larger Sets fail with `ResourceExhausted` |
 | `RUNE_MAX_INFLIGHT_BYTES`    | `2GB`            | Server-wide cap on value bytes held by Set buffers and Get copies (at least `RUNE_MAX_VALUE_BYTES`); over it, requests fail with `ResourceExhausted` — treat as "not cached" |
 | `RUNE_GET_IDLE_TIMEOUT`      | `30s`            | A Get whose client reads nothing for this long ends with `DeadlineExceeded` |
@@ -202,7 +202,7 @@ All configuration is via environment variables. All settings have sensible defau
 | `RUNE_BLOCK_CACHE_SIZE`      | _(Badger default)_ | In-process block cache size (KB/MB/GB/TB); increases read throughput for hot-key workloads — e.g. `256MB` |
 | `RUNE_ETCD_ENDPOINTS`        | _(empty)_        | Comma-separated etcd endpoints; empty = single-node mode |
 | `RUNE_NODE_ID`               | hostname         | Stable identity for this node in the ring |
-| `RUNE_NODE_ADDR`             | `localhost:{RUNE_PORT}` | Advertised address peers use to reach this node |
+| `RUNE_NODE_ADDR`             | `localhost:{RUNE_PORT}` | Advertised address peers use to reach this node. Required in cluster mode: a host peers can reach and a port, not `localhost`, loopback or `0.0.0.0`. See [docs/deploy.md](docs/deploy.md) |
 
 ## Health checks
 

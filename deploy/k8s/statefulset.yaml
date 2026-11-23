@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rune
+  labels:
+    app.kubernetes.io/name: rune
+spec:
+  serviceName: rune
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rune
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rune
+    spec:
+      # Shutdown: revoke etcd lease (up to 5s), 2s leave delay, gRPC drain (up to 30s),
+      # stop metrics (up to 5s), close Badger. About 42s; keep this above that sum.
+      terminationGracePeriodSeconds: 60
+      automountServiceAccountToken: false
+      containers:
+        - name: rune
+          image: ghcr.io/bryandguy/rune:latest # pin a released version
+          ports:
+            - name: grpc
+              containerPort: 7946
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: RUNE_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: RUNE_NODE_ADDR
+              value: "$(RUNE_NODE_ID).rune.$(POD_NAMESPACE).svc:7946"
+            - name: RUNE_ETCD_ENDPOINTS
+              value: "etcd:2379"
+            - name: RUNE_DATA_DIR
+              value: /var/rune/data
+            - name: RUNE_MAX_STORAGE
+              value: "50GB"
+            # About 90% of the memory limit so the Go GC collects before the cgroup OOM-kills.
+            - name: GOMEMLIMIT
+              value: "6400MiB"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 7Gi
+            limits:
+              memory: 7Gi
+          startupProbe:
+            grpc:
+              port: 7946
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            grpc:
+              port: 7946
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            grpc:
+              port: 7946
+              service: rune
+            periodSeconds: 5
+            failureThreshold: 2
+          volumeMounts:
+            - name: data
+              mountPath: /var/rune/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 64Gi
