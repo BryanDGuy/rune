@@ -145,10 +145,11 @@ func LoadConfig() (*Config, error) {
 func (c *Config) Validate() error {
 	var errs []error
 	if len(c.EtcdEndpoints) > 0 {
-		host, _, err := net.SplitHostPort(c.NodeAddr)
+		host, port, err := net.SplitHostPort(c.NodeAddr)
 		ip := net.ParseIP(host)
-		if err != nil || host == "" || strings.EqualFold(host, "localhost") || (ip != nil && (ip.IsLoopback() || ip.IsUnspecified())) {
-			errs = append(errs, fmt.Errorf("RUNE_NODE_ADDR %q: cluster mode needs a host:port peers can reach, not empty, loopback or unspecified", c.NodeAddr))
+		p, perr := strconv.Atoi(port)
+		if err != nil || host == "" || perr != nil || p < 1 || p > 65535 || strings.EqualFold(host, "localhost") || (ip != nil && (ip.IsLoopback() || ip.IsUnspecified())) {
+			errs = append(errs, fmt.Errorf("RUNE_NODE_ADDR %q: cluster mode needs a host:port (port 1-65535) peers can reach, not empty, loopback or unspecified", c.NodeAddr))
 		}
 		if slices.Contains(c.EtcdEndpoints, "") {
 			errs = append(errs, errors.New("RUNE_ETCD_ENDPOINTS: contains an empty endpoint"))
