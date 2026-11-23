@@ -432,3 +432,33 @@ func TestForwardingLoopPrevention(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, codes.NotFound, status.Code(err))
 }
+
+// TestForwardedDeleteExistsPassPeerStatus: a peer's status code must reach the
+// client unchanged, not be rewritten to Unavailable.
+func TestForwardedDeleteExistsPassPeerStatus(t *testing.T) {
+	client := forwardingToStubPeer(t)
+
+	_, err := client.Delete(context.Background(), &runev1.DeleteRequest{Keys: []string{"k"}})
+	assert.Equal(t, codes.Unimplemented, status.Code(err), "delete: %v", err)
+	_, err = client.Exists(context.Background(), &runev1.ExistsRequest{Keys: []string{"k"}})
+	assert.Equal(t, codes.Unimplemented, status.Code(err), "exists: %v", err)
+}
+
+// forwardingToStubPeer returns a client for a node that forwards every key to a
+// stub peer answering Unimplemented to every RPC.
+func forwardingToStubPeer(t *testing.T) runev1.RuneServiceClient {
+	t.Helper()
+	lis := bufconn.Listen(bufSize)
+	peer := grpc.NewServer()
+	runev1.RegisterRuneServiceServer(peer, runev1.UnimplementedRuneServiceServer{})
+	go func() { _ = peer.Serve(lis) }()
+	t.Cleanup(peer.Stop)
+	peerConn, err := grpc.NewClient("passthrough://stub-peer",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return lis.DialContext(ctx) }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = peerConn.Close() })
+	conn, cleanup := testutil.NewBufconnConn(t, bufSize, &testutil.BufconnOptions{ForwardTo: peerConn})
+	t.Cleanup(cleanup)
+	return runev1.NewRuneServiceClient(conn)
+}
