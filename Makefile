@@ -6,8 +6,8 @@
         fmt fmt-rune fmt-sdk \
         fmt-check fmt-check-rune fmt-check-sdk \
         vet vet-rune vet-sdk \
-        modernize modernize-rune modernize-sdk \
-        modernize-fix modernize-fix-rune modernize-fix-sdk \
+        fix-check fix-check-rune fix-check-sdk \
+        fix fix-rune fix-sdk \
         cluster-up cluster-down bench
 
 BINARY       := bin/rune
@@ -54,9 +54,9 @@ test-integration:
 
 verify: verify-rune verify-sdk
 
-verify-rune: lint-rune fmt-check-rune vet-rune modernize-rune
+verify-rune: lint-rune fmt-check-rune vet-rune fix-check-rune
 
-verify-sdk: lint-sdk fmt-check-sdk vet-sdk modernize-sdk
+verify-sdk: lint-sdk fmt-check-sdk vet-sdk fix-check-sdk
 
 lint: lint-rune lint-sdk
 
@@ -90,21 +90,21 @@ vet-rune:
 vet-sdk:
 	@go vet ./sdk/go/...
 
-modernize: modernize-rune modernize-sdk
+fix-check: fix-check-rune fix-check-sdk
 
-modernize-rune:
-	@pkgs=$$(go list ./rune/... | grep -v /rune/internal/gen/); [ -z "$$pkgs" ] || go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest $$pkgs
+fix-check-rune:
+	@pkgs=$$(go list ./rune/... | grep -v /rune/internal/gen/); [ -z "$$pkgs" ] || go fix -diff $$pkgs
 
-modernize-sdk:
-	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/internal/gen/); [ -z "$$pkgs" ] || go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest $$pkgs
+fix-check-sdk:
+	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/internal/gen/); [ -z "$$pkgs" ] || go fix -diff $$pkgs
 
-modernize-fix: modernize-fix-rune modernize-fix-sdk
+fix: fix-rune fix-sdk
 
-modernize-fix-rune:
-	@pkgs=$$(go list ./rune/... | grep -v /rune/internal/gen/); [ -z "$$pkgs" ] || go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix $$pkgs
+fix-rune:
+	@pkgs=$$(go list ./rune/... | grep -v /rune/internal/gen/); [ -z "$$pkgs" ] || go fix $$pkgs
 
-modernize-fix-sdk:
-	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/internal/gen/); [ -z "$$pkgs" ] || go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix $$pkgs
+fix-sdk:
+	@pkgs=$$(go list ./sdk/go/... | grep -v /sdk/go/internal/gen/); [ -z "$$pkgs" ] || go fix $$pkgs
 
 # Local 3-node cluster + etcd via docker-compose (nodes on host ports 7946/7947/7948).
 cluster-up:
