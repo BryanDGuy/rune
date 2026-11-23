@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"time"
 
@@ -193,8 +194,12 @@ func (h *handler) forwardSet(ctx context.Context, peerAddr string, hdr *runev1.S
 
 // Delete removes keys locally and, on the client-facing node in cluster mode,
 // broadcasts to every other ring member so the owner and any orphan copies
-// (left by ring changes) are cleared. It returns OK only if every node succeeds.
+// (left by ring changes) are cleared. Every peer is tried even if one fails; it
+// returns OK only if every node succeeds.
 func (h *handler) Delete(ctx context.Context, req *runev1.DeleteRequest) (*runev1.DeleteResponse, error) {
+	if len(req.Keys) == 0 {
+		return &runev1.DeleteResponse{}, nil
+	}
 	if err := h.srv.store.Delete(req.Keys...); err != nil {
 		return nil, status.Errorf(codes.Internal, "delete: %v", err)
 	}
@@ -203,20 +208,23 @@ func (h *handler) Delete(ctx context.Context, req *runev1.DeleteRequest) (*runev
 		return &runev1.DeleteResponse{}, nil
 	}
 	// shortcut: peers are contacted sequentially; parallelise if ring size makes latency matter.
+	var errs []error
 	for _, node := range h.srv.membership.Ring().Nodes() {
 		if node.ID == h.srv.membership.NodeID() {
 			continue
 		}
 		client, err := h.peerClient(node.Addr)
-		if err != nil {
-			return nil, err
+		if err == nil {
+			peerCtx, cancel := context.WithTimeout(forwardCtx(ctx), peerTimeout)
+			_, err = client.Delete(peerCtx, req)
+			cancel()
 		}
-		peerCtx, cancel := context.WithTimeout(forwardCtx(ctx), peerTimeout)
-		_, err = client.Delete(peerCtx, req)
-		cancel()
 		if err != nil {
-			return nil, status.Errorf(codes.Unavailable, "peer delete %s: %v", node.ID, err)
+			errs = append(errs, fmt.Errorf("%s: %w", node.ID, err))
 		}
+	}
+	if len(errs) > 0 {
+		return nil, status.Errorf(codes.Unavailable, "peer delete: %v", errors.Join(errs...))
 	}
 	return &runev1.DeleteResponse{}, nil
 }
@@ -237,16 +245,17 @@ func (h *handler) Exists(ctx context.Context, req *runev1.ExistsRequest) (*runev
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "exists: %v", err)
 	}
+	// shortcut: owners are contacted sequentially; parallelise if ring size makes latency matter.
 	for addr, keys := range remote {
 		client, err := h.peerClient(addr)
 		if err != nil {
-			return nil, err
+			return nil, status.Errorf(codes.Unavailable, "peer exists %s: %v", addr, err)
 		}
 		peerCtx, cancel := context.WithTimeout(forwardCtx(ctx), peerTimeout)
 		resp, err := client.Exists(peerCtx, &runev1.ExistsRequest{Keys: keys})
 		cancel()
 		if err != nil {
-			return nil, status.Errorf(codes.Unavailable, "peer exists: %v", err)
+			return nil, status.Errorf(codes.Unavailable, "peer exists %s: %v", addr, err)
 		}
 		n += resp.Count
 	}

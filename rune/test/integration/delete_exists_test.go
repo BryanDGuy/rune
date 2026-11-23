@@ -89,7 +89,46 @@ func TestIntegrationClusterDeletePeerDown(t *testing.T) {
 	start := time.Now()
 	_, err := runev1.NewRuneServiceClient(conns[0]).Delete(ctx, &runev1.DeleteRequest{Keys: []string{"any"}})
 	require.Error(t, err)
+	require.ErrorContains(t, err, "node-2", "error must name the failed peer")
 	require.Less(t, time.Since(start), 2*time.Second, "should fail fast, not hang")
+
+	// An empty Delete has nothing to broadcast, so the dead peer doesn't matter.
+	_, err = runev1.NewRuneServiceClient(conns[0]).Delete(ctx, &runev1.DeleteRequest{})
+	require.NoError(t, err)
+}
+
+// TestIntegrationClusterDeleteReachesAllLivePeers: one dead peer must not stop
+// the broadcast; every reachable copy is gone after a single Delete. Peer order
+// is random, so several rounds make a skipped peer near-certain to show up.
+func TestIntegrationClusterDeleteReachesAllLivePeers(t *testing.T) {
+	conns, _, stops := testutil.NewBufconnCluster(t, 4)
+	stops[3]()
+	fwd := metadata.AppendToOutgoingContext(t.Context(), "x-rune-forwarded", "1")
+
+	for round := range 6 {
+		for _, c := range conns[1:3] {
+			setLocal(t, c, "k")
+		}
+		_, err := runev1.NewRuneServiceClient(conns[0]).Delete(t.Context(), &runev1.DeleteRequest{Keys: []string{"k"}})
+		require.ErrorContains(t, err, "node-3", "round %d", round)
+		for i, c := range conns[1:3] {
+			resp, err := runev1.NewRuneServiceClient(c).Exists(fwd, &runev1.ExistsRequest{Keys: []string{"k"}})
+			require.NoError(t, err)
+			require.EqualValues(t, 0, resp.Count, "round %d: live peer node-%d kept its copy", round, i+1)
+		}
+	}
+}
+
+// setLocal stores key on the node behind conn without forwarding it to the owner.
+func setLocal(t *testing.T, conn *grpc.ClientConn, key string) {
+	t.Helper()
+	fwd := metadata.AppendToOutgoingContext(t.Context(), "x-rune-forwarded", "1")
+	ps, err := runev1.NewRuneServiceClient(conn).Set(fwd)
+	require.NoError(t, err)
+	require.NoError(t, ps.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Header{Header: &runev1.SetHeader{Key: key}}}))
+	require.NoError(t, ps.Send(&runev1.SetRequest{Payload: &runev1.SetRequest_Chunk{Chunk: []byte("v")}}))
+	_, err = ps.CloseAndRecv()
+	require.NoError(t, err)
 }
 
 // TestIntegrationClusterPeerHangs: a ring member that accepts TCP but never
@@ -120,7 +159,7 @@ func TestIntegrationClusterPeerHangs(t *testing.T) {
 
 	start = time.Now()
 	_, err = client.Exists(ctx, &runev1.ExistsRequest{Keys: []string{deadKey}})
-	require.Error(t, err)
+	require.ErrorContains(t, err, lis.Addr().String(), "error must name the failed peer")
 	require.Less(t, time.Since(start), 8*time.Second, "exists must give up on a hung peer")
 }
 
