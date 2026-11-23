@@ -14,4 +14,4 @@ See [docs/STYLE.md](docs/STYLE.md) for API design and other coding conventions.
 
 ## Before Every Commit
 
-Always run `make verify` before committing. It runs fmt, vet, fix (`go fix`, which may edit files), and lint. Do not commit if any check fails.
+Always run `make verify` before committing. It runs fmt, vet, fix (`go fix -diff`), and lint. Do not commit if any check fails.
