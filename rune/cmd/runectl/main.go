@@ -144,11 +144,7 @@ func cmdSet(args []string) error {
 	}
 	defer conn.Close()
 
-	var opts *runesdk.SetOptions
-	if *ttl > 0 {
-		opts = &runesdk.SetOptions{TTL: *ttl}
-	}
-	return runesdk.NewClient(conn).Set(context.Background(), fs.Arg(0), src, opts)
+	return runesdk.NewClient(conn).Set(context.Background(), fs.Arg(0), src, &runesdk.SetOptions{TTL: *ttl})
 }
 
 func cmdDelete(args []string) error {
