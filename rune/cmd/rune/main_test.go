@@ -169,11 +169,13 @@ func TestShutdownWithoutEtcdWaitsForLeaseExpiry(t *testing.T) {
 	done := make(chan struct{})
 	go func() { n1.shutdown(); close(done) }()
 
+	// Keep going 1s past shutdown: a node that closed too early is still in node-2's ring then.
 	var sent, failures int
-	for running := true; running; {
+	var deadline time.Time
+	for deadline.IsZero() || time.Now().Before(deadline) {
 		select {
 		case <-done:
-			running = false
+			done, deadline = nil, time.Now().Add(time.Second) // nil: wait on the ticker from now on
 		case <-time.After(10 * time.Millisecond):
 		}
 		sent++
@@ -183,7 +185,7 @@ func TestShutdownWithoutEtcdWaitsForLeaseExpiry(t *testing.T) {
 		}
 	}
 	require.Positive(t, sent)
-	require.Zero(t, failures, "Set/Delete via node-2 failed during node-1 shutdown (%d rounds)", sent)
+	require.Zero(t, failures, "%d of %d Set/Delete rounds via node-2 failed during and after node-1 shutdown", failures, sent)
 	n2.shutdown()
 }
 
